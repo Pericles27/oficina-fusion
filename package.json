@@ -1,0 +1,24 @@
+{
+  "name": "oficina-fusion",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Sistema integral para la oficina financiera — fusión Admin_caja + mesa-demo",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "type-check": "turbo run type-check",
+    "db:generate": "pnpm --filter @oficina/backend db:generate",
+    "db:migrate": "pnpm --filter @oficina/backend db:migrate",
+    "db:seed": "pnpm --filter @oficina/backend db:seed",
+    "setup": "pnpm install && pnpm db:generate && pnpm db:migrate && pnpm db:seed"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.0"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "packageManager": "pnpm@9.15.0"
+}
