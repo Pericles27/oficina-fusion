@@ -1,0 +1,113 @@
+{
+  "version": 3,
+  "pages404": true,
+  "caseSensitive": false,
+  "basePath": "",
+  "redirects": [
+    {
+      "source": "/:path+/",
+      "destination": "/:path+",
+      "internal": true,
+      "statusCode": 308,
+      "regex": "^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))/$"
+    }
+  ],
+  "headers": [],
+  "rewrites": {
+    "beforeFiles": [],
+    "afterFiles": [],
+    "fallback": []
+  },
+  "dynamicRoutes": [],
+  "staticRoutes": [
+    {
+      "page": "/",
+      "regex": "^/(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/(?:/)?$"
+    },
+    {
+      "page": "/_not-found",
+      "regex": "^/_not\\-found(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_not\\-found(?:/)?$"
+    },
+    {
+      "page": "/admin",
+      "regex": "^/admin(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin(?:/)?$"
+    },
+    {
+      "page": "/admin/closing",
+      "regex": "^/admin/closing(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/closing(?:/)?$"
+    },
+    {
+      "page": "/admin/customers",
+      "regex": "^/admin/customers(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/customers(?:/)?$"
+    },
+    {
+      "page": "/admin/operations",
+      "regex": "^/admin/operations(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/operations(?:/)?$"
+    },
+    {
+      "page": "/admin/quotation",
+      "regex": "^/admin/quotation(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/quotation(?:/)?$"
+    },
+    {
+      "page": "/cadete",
+      "regex": "^/cadete(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/cadete(?:/)?$"
+    },
+    {
+      "page": "/cadete/operations",
+      "regex": "^/cadete/operations(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/cadete/operations(?:/)?$"
+    },
+    {
+      "page": "/cadete/profile",
+      "regex": "^/cadete/profile(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/cadete/profile(?:/)?$"
+    },
+    {
+      "page": "/cadete/tickets",
+      "regex": "^/cadete/tickets(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/cadete/tickets(?:/)?$"
+    },
+    {
+      "page": "/cadete/tickets/new",
+      "regex": "^/cadete/tickets/new(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/cadete/tickets/new(?:/)?$"
+    }
+  ],
+  "dataRoutes": [],
+  "rsc": {
+    "header": "rsc",
+    "varyHeader": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+    "prefetchHeader": "next-router-prefetch",
+    "didPostponeHeader": "x-nextjs-postponed",
+    "contentTypeHeader": "text/x-component",
+    "suffix": ".rsc",
+    "prefetchSuffix": ".prefetch.rsc",
+    "prefetchSegmentHeader": "next-router-segment-prefetch",
+    "prefetchSegmentSuffix": ".segment.rsc",
+    "prefetchSegmentDirSuffix": ".segments"
+  },
+  "rewriteHeaders": {
+    "pathHeader": "x-nextjs-rewritten-path",
+    "queryHeader": "x-nextjs-rewritten-query"
+  }
+}

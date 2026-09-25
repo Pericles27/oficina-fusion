@@ -1,0 +1,14 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/page": "app/page.js",
+  "/admin/closing/page": "app/admin/closing/page.js",
+  "/admin/operations/page": "app/admin/operations/page.js",
+  "/admin/customers/page": "app/admin/customers/page.js",
+  "/admin/quotation/page": "app/admin/quotation/page.js",
+  "/cadete/operations/page": "app/cadete/operations/page.js",
+  "/cadete/page": "app/cadete/page.js",
+  "/cadete/profile/page": "app/cadete/profile/page.js",
+  "/cadete/tickets/page": "app/cadete/tickets/page.js",
+  "/cadete/tickets/new/page": "app/cadete/tickets/new/page.js",
+  "/admin/page": "app/admin/page.js"
+}

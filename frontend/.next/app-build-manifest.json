@@ -1,0 +1,134 @@
+{
+  "pages": {
+    "/_not-found/page": [
+      "static/chunks/webpack-74c939c87fa0092a.js",
+      "static/chunks/4bd1b696-c023c6e3521b1417.js",
+      "static/chunks/255-2dbbf79f36f0dfa2.js",
+      "static/chunks/main-app-6ca22b3977c15604.js",
+      "static/chunks/app/_not-found/page-cfe12c3e78fca51a.js"
+    ],
+    "/layout": [
+      "static/chunks/webpack-74c939c87fa0092a.js",
+      "static/chunks/4bd1b696-c023c6e3521b1417.js",
+      "static/chunks/255-2dbbf79f36f0dfa2.js",
+      "static/chunks/main-app-6ca22b3977c15604.js",
+      "static/css/33f5bbf64b88c218.css",
+      "static/chunks/952-bc8749f1c578bd8d.js",
+      "static/chunks/333-4ee25448a6353d67.js",
+      "static/chunks/app/layout-eb703f2076b3bfa4.js"
+    ],
+    "/page": [
+      "static/chunks/webpack-74c939c87fa0092a.js",
+      "static/chunks/4bd1b696-c023c6e3521b1417.js",
+      "static/chunks/255-2dbbf79f36f0dfa2.js",
+      "static/chunks/main-app-6ca22b3977c15604.js",
+      "static/chunks/app/page-e897c7d9aad14219.js"
+    ],
+    "/admin/layout": [
+      "static/chunks/webpack-74c939c87fa0092a.js",
+      "static/chunks/4bd1b696-c023c6e3521b1417.js",
+      "static/chunks/255-2dbbf79f36f0dfa2.js",
+      "static/chunks/main-app-6ca22b3977c15604.js",
+      "static/chunks/885-48629d8c2a3c814c.js",
+      "static/chunks/app/admin/layout-bacc2881b24e0dca.js"
+    ],
+    "/admin/closing/page": [
+      "static/chunks/webpack-74c939c87fa0092a.js",
+      "static/chunks/4bd1b696-c023c6e3521b1417.js",
+      "static/chunks/255-2dbbf79f36f0dfa2.js",
+      "static/chunks/main-app-6ca22b3977c15604.js",
+      "static/chunks/952-bc8749f1c578bd8d.js",
+      "static/chunks/333-4ee25448a6353d67.js",
+      "static/chunks/app/admin/closing/page-9ea4c8b045f4fe01.js"
+    ],
+    "/admin/operations/page": [
+      "static/chunks/webpack-74c939c87fa0092a.js",
+      "static/chunks/4bd1b696-c023c6e3521b1417.js",
+      "static/chunks/255-2dbbf79f36f0dfa2.js",
+      "static/chunks/main-app-6ca22b3977c15604.js",
+      "static/chunks/952-bc8749f1c578bd8d.js",
+      "static/chunks/333-4ee25448a6353d67.js",
+      "static/chunks/app/admin/operations/page-ce01e7f38f3f8b14.js"
+    ],
+    "/admin/customers/page": [
+      "static/chunks/webpack-74c939c87fa0092a.js",
+      "static/chunks/4bd1b696-c023c6e3521b1417.js",
+      "static/chunks/255-2dbbf79f36f0dfa2.js",
+      "static/chunks/main-app-6ca22b3977c15604.js",
+      "static/chunks/952-bc8749f1c578bd8d.js",
+      "static/chunks/333-4ee25448a6353d67.js",
+      "static/chunks/app/admin/customers/page-96aeef5a8e5fe1ff.js"
+    ],
+    "/admin/quotation/page": [
+      "static/chunks/webpack-74c939c87fa0092a.js",
+      "static/chunks/4bd1b696-c023c6e3521b1417.js",
+      "static/chunks/255-2dbbf79f36f0dfa2.js",
+      "static/chunks/main-app-6ca22b3977c15604.js",
+      "static/chunks/952-bc8749f1c578bd8d.js",
+      "static/chunks/333-4ee25448a6353d67.js",
+      "static/chunks/app/admin/quotation/page-861fc47ff5c2976c.js"
+    ],
+    "/cadete/layout": [
+      "static/chunks/webpack-74c939c87fa0092a.js",
+      "static/chunks/4bd1b696-c023c6e3521b1417.js",
+      "static/chunks/255-2dbbf79f36f0dfa2.js",
+      "static/chunks/main-app-6ca22b3977c15604.js",
+      "static/chunks/885-48629d8c2a3c814c.js",
+      "static/chunks/app/cadete/layout-a275ebe9a7be723d.js"
+    ],
+    "/cadete/operations/page": [
+      "static/chunks/webpack-74c939c87fa0092a.js",
+      "static/chunks/4bd1b696-c023c6e3521b1417.js",
+      "static/chunks/255-2dbbf79f36f0dfa2.js",
+      "static/chunks/main-app-6ca22b3977c15604.js",
+      "static/chunks/952-bc8749f1c578bd8d.js",
+      "static/chunks/333-4ee25448a6353d67.js",
+      "static/chunks/app/cadete/operations/page-26d643957849dedb.js"
+    ],
+    "/cadete/page": [
+      "static/chunks/webpack-74c939c87fa0092a.js",
+      "static/chunks/4bd1b696-c023c6e3521b1417.js",
+      "static/chunks/255-2dbbf79f36f0dfa2.js",
+      "static/chunks/main-app-6ca22b3977c15604.js",
+      "static/chunks/952-bc8749f1c578bd8d.js",
+      "static/chunks/885-48629d8c2a3c814c.js",
+      "static/chunks/333-4ee25448a6353d67.js",
+      "static/chunks/app/cadete/page-1a0703ca885c6c46.js"
+    ],
+    "/cadete/profile/page": [
+      "static/chunks/webpack-74c939c87fa0092a.js",
+      "static/chunks/4bd1b696-c023c6e3521b1417.js",
+      "static/chunks/255-2dbbf79f36f0dfa2.js",
+      "static/chunks/main-app-6ca22b3977c15604.js",
+      "static/chunks/952-bc8749f1c578bd8d.js",
+      "static/chunks/333-4ee25448a6353d67.js",
+      "static/chunks/app/cadete/profile/page-0c35bf30bebe5edb.js"
+    ],
+    "/cadete/tickets/page": [
+      "static/chunks/webpack-74c939c87fa0092a.js",
+      "static/chunks/4bd1b696-c023c6e3521b1417.js",
+      "static/chunks/255-2dbbf79f36f0dfa2.js",
+      "static/chunks/main-app-6ca22b3977c15604.js",
+      "static/chunks/952-bc8749f1c578bd8d.js",
+      "static/chunks/333-4ee25448a6353d67.js",
+      "static/chunks/app/cadete/tickets/page-efb2943fc5d81c1d.js"
+    ],
+    "/cadete/tickets/new/page": [
+      "static/chunks/webpack-74c939c87fa0092a.js",
+      "static/chunks/4bd1b696-c023c6e3521b1417.js",
+      "static/chunks/255-2dbbf79f36f0dfa2.js",
+      "static/chunks/main-app-6ca22b3977c15604.js",
+      "static/chunks/952-bc8749f1c578bd8d.js",
+      "static/chunks/885-48629d8c2a3c814c.js",
+      "static/chunks/333-4ee25448a6353d67.js",
+      "static/chunks/app/cadete/tickets/new/page-c3bf48f6dd468c24.js"
+    ],
+    "/admin/page": [
+      "static/chunks/webpack-74c939c87fa0092a.js",
+      "static/chunks/4bd1b696-c023c6e3521b1417.js",
+      "static/chunks/255-2dbbf79f36f0dfa2.js",
+      "static/chunks/main-app-6ca22b3977c15604.js",
+      "static/chunks/app/admin/page-e7a50dee74d1f52e.js"
+    ]
+  }
+}
