@@ -5,6 +5,7 @@ import {
   IsEmail,
   IsArray,
   IsIn,
+  IsBoolean,
   MinLength,
 } from 'class-validator';
 import { RolUsuario } from '@prisma/client';
@@ -39,8 +40,8 @@ export class RegisterDto {
 
   @IsOptional()
   @IsArray()
-  @IsIn([RolUsuario.ADMIN, RolUsuario.CADETE], { each: true })
-  roles?: ('ADMIN' | 'CADETE')[];
+  @IsIn([RolUsuario.ADMIN, RolUsuario.OPERADOR, RolUsuario.CADETE], { each: true })
+  roles?: ('ADMIN' | 'OPERADOR' | 'CADETE')[];
 }
 
 export class ChangePasswordDto {
@@ -51,4 +52,16 @@ export class ChangePasswordDto {
   @IsString()
   @MinLength(6)
   newPassword!: string;
+}
+
+// F2 D4: PATCH /users/:id — sólo ADMIN. Activar/desactivar y cambiar roles.
+export class UpdateUserDto {
+  @IsOptional()
+  @IsBoolean()
+  activo?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @IsIn([RolUsuario.ADMIN, RolUsuario.OPERADOR, RolUsuario.CADETE], { each: true })
+  roles?: RolUsuario[];
 }
