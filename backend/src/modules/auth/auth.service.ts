@@ -33,6 +33,11 @@ export class AuthService {
       throw new ForbiddenException(`Account blocked until ${user.bloqueadoHasta.toISOString()}`);
     }
 
+    if (!user.activo) {
+      await this.logLoginEvent(user.id, false, dto.username, 'Account inactive');
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
 
     if (!valid) {
