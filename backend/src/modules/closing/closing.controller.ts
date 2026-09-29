@@ -8,8 +8,11 @@ import { RolUsuario } from '@prisma/client';
 import { ZodValidationPipe } from '@common/pipes/zod-validation.pipe';
 import { CreateCierreSchema, CreateCierreDto } from './dto/closing.dto';
 
+// F2 / default 3 (§6 del plan): el operador arma el borrador del cierre,
+// el admin es el único que lo confirma o reabre. Separación de funciones:
+// el que cuenta la caja no es el que la aprueba.
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(RolUsuario.ADMIN)
+@Roles(RolUsuario.ADMIN, RolUsuario.OPERADOR)
 @Controller('closing')
 export class ClosingController {
   constructor(private closingService: ClosingService) {}
@@ -34,11 +37,13 @@ export class ClosingController {
   }
 
   @Post(':id/confirm')
+  @Roles(RolUsuario.ADMIN)
   confirm(@Param('id') id: string) {
     return this.closingService.confirm(id);
   }
 
   @Post(':id/reopen')
+  @Roles(RolUsuario.ADMIN)
   reopen(@Param('id') id: string) {
     return this.closingService.reopen(id);
   }
