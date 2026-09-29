@@ -78,6 +78,51 @@ describe('AuthService', () => {
       );
     });
 
+    it('lanza UnauthorizedException si el usuario está inactivo (activo=false), sin revelar el motivo', async () => {
+      const hash = await bcrypt.hash('correct-password', 10);
+      prisma.usuario.findUnique.mockResolvedValue({ ...baseUser, passwordHash: hash, activo: false });
+
+      await expect(
+        service.login({ username: 'jdoe', password: 'correct-password' }),
+      ).rejects.toThrow(UnauthorizedException);
+
+      // El mensaje debe ser el genérico de siempre, no revelar que la cuenta existe pero está inactiva
+      try {
+        await service.login({ username: 'jdoe', password: 'correct-password' });
+      } catch (e: any) {
+        expect(e.message).toBe('Invalid credentials');
+      }
+
+      // No debe llegar a comparar password: el bcrypt.compare no debería ejecutarse
+      // (verificado indirectamente: intentosFallidos nunca se actualiza para este camino)
+      expect(prisma.usuario.update).not.toHaveBeenCalled();
+
+      expect(prisma.loginEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ exitoso: false, motivoFallo: 'Account inactive' }),
+        }),
+      );
+    });
+
+    it('propaga IP y user-agent del Request a logLoginEvent', async () => {
+      prisma.usuario.findUnique.mockResolvedValue(null);
+
+      const fakeReq = {
+        ip: '10.0.0.5',
+        headers: { 'user-agent': 'vitest-agent/1.0' },
+      } as any;
+
+      await expect(
+        service.login({ username: 'ghost', password: 'x' }, fakeReq),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(prisma.loginEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ ip: '10.0.0.5', userAgent: 'vitest-agent/1.0' }),
+        }),
+      );
+    });
+
     it('lanza UnauthorizedException con password incorrecta e incrementa intentosFallidos', async () => {
       const hash = await bcrypt.hash('correct-password', 10);
       prisma.usuario.findUnique.mockResolvedValue({ ...baseUser, passwordHash: hash, intentosFallidos: 2 });
