@@ -1,0 +1,40 @@
+# =============================================================
+# Oficina Fusion — Backend (NestJS) production Docker image
+# Standalone build (no requires pnpm workspace).
+# =============================================================
+
+FROM node:20-alpine AS base
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+
+# ---- deps ----
+FROM base AS deps
+WORKDIR /app
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+# ---- build: prisma + compile ----
+FROM deps AS build
+WORKDIR /app
+COPY . .
+RUN pnpm db:generate
+RUN pnpm build
+
+# ---- runtime ----
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+
+RUN addgroup -g 1001 -S nodejs && adduser -S nestjs -u 1001
+
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/package.json ./
+
+USER nestjs
+EXPOSE 3001
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:'+(process.env.PORT||3001)+'/health',res=>process.exit(res.statusCode?0:1)).on('error',()=>process.exit(1))"
+
+CMD ["node", "dist/main"]

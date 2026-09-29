@@ -1,3 +1,25 @@
-backend
-node_modules
+# Dependencias
+node_modules/
+
+# Builds
+frontend/.next/
+frontend/out/
+backend/dist/
+*.tsbuildinfo
+
+# Entorno — nunca commitear secretos
 .env
+.env.*
+!.env.example
+!.env.production.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+
+# Turbo
+.turbo/
+.claude/worktrees/

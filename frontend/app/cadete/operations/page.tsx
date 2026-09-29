@@ -1,143 +1,167 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, ArrowRightLeft } from 'lucide-react';
-import { SearchBar } from '@/components/ui';
-import { Pagination } from '@/components/ui';
-import { EmptyState } from '@/components/ui';
+import { ArrowRightLeft, Search, Paperclip, Check, Clock } from 'lucide-react';
+import { SearchBar, EmptyState } from '@/components/ui';
+import { ETicketPanel } from '@/components/ETicketPanel';
+import {
+  useCaja,
+  resumenTicket,
+  OP_STATUS_LABEL,
+  type Operation,
+} from '@/lib/caja-store';
 
-const allOperations = [
-  { id: 'OP-001', type: 'Compra', client: 'Carlos Méndez', status: 'Completada', date: '2026-09-25', time: '10:32 AM' },
-  { id: 'OP-002', type: 'Venta', client: 'Ana Rodríguez', status: 'Pendiente', date: '2026-09-25', time: '11:15 AM' },
-  { id: 'OP-003', type: 'Compra', client: 'Miguel Torres', status: 'Completada', date: '2026-09-25', time: '11:48 AM' },
-  { id: 'OP-004', type: 'Venta', client: 'Laura Sánchez', status: 'Completada', date: '2026-09-25', time: '12:02 PM' },
-  { id: 'OP-005', type: 'Compra', client: 'Roberto Díaz', status: 'Rechazada', date: '2026-09-25', time: '12:30 PM' },
-  { id: 'OP-006', type: 'Venta', client: 'María López', status: 'Completada', date: '2026-09-24', time: '09:10 AM' },
-  { id: 'OP-007', type: 'Compra', client: 'Jorge Ramírez', status: 'Pendiente', date: '2026-09-24', time: '10:45 AM' },
-  { id: 'OP-008', type: 'Venta', client: 'Sofía Herrera', status: 'Completada', date: '2026-09-24', time: '02:20 PM' },
-  { id: 'OP-009', type: 'Compra', client: 'Diego Morales', status: 'Completada', date: '2026-09-24', time: '03:55 PM' },
-  { id: 'OP-010', type: 'Venta', client: 'Valentina Ruiz', status: 'Pendiente', date: '2026-09-23', time: '11:00 AM' },
-  { id: 'OP-011', type: 'Compra', client: 'Tomás García', status: 'Completada', date: '2026-09-23', time: '01:30 PM' },
-  { id: 'OP-012', type: 'Venta', client: 'Camila Ortiz', status: 'Completada', date: '2026-09-23', time: '04:15 PM' },
-];
+const fmt = (n: number, digits = 0) =>
+  n.toLocaleString('es-AR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
-const statusClass: Record<string, string> = {
-  Completada: 'badge-success',
-  Pendiente: 'badge-warning',
-  Rechazada: 'badge-danger',
+const statusClass: Record<Operation['status'], string> = {
+  finalizada: 'badge-success',
+  ejecucion: 'badge-blue',
+  pendiente: 'badge-warning',
 };
 
-const ITEMS_PER_PAGE = 5;
-
-export default function OperationsPage() {
+export default function CadeteOperationsPage() {
+  const { state } = useCaja();
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return allOperations;
-    const q = search.toLowerCase();
-    return allOperations.filter(
-      (op) =>
-        op.id.toLowerCase().includes(q) ||
-        op.client.toLowerCase().includes(q) ||
-        op.type.toLowerCase().includes(q) ||
-        op.status.toLowerCase().includes(q)
+    const q = search.trim().toLowerCase();
+    const ops = [...state.operaciones].reverse();
+    if (!q) return ops;
+    return ops.filter((o) =>
+      o.codigo.toLowerCase().includes(q) ||
+      o.cliente.toLowerCase().includes(q) ||
+      o.par.toLowerCase().includes(q)
     );
-  }, [search]);
+  }, [search, state.operaciones]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
-  const safePage = Math.min(page, totalPages);
-  const start = (safePage - 1) * ITEMS_PER_PAGE;
-  const pageItems = filtered.slice(start, start + ITEMS_PER_PAGE);
+  const opAbierta = useMemo(
+    () => state.operaciones.find((o) => o.id === openId) ?? null,
+    [openId, state.operaciones]
+  );
 
-  if (filtered.length === 0) {
-    return (
-      <div className="p-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-[var(--warm-gray-1)]">Operaciones</h1>
-          <p className="text-sm text-[var(--warm-gray-2)] mt-1">Historial de operaciones realizadas</p>
-        </div>
-        <div className="flex justify-center py-20">
-          <EmptyState
-            variant="data"
-            title="Sin resultados"
-            description="No se encontraron operaciones para esta búsqueda"
-          />
-        </div>
-      </div>
-    );
-  }
+  const parDeAbierta = useMemo(
+    () => (opAbierta ? state.pares.find((p) => p.par === opAbierta.par) ?? state.pares[0] : null),
+    [opAbierta, state.pares]
+  );
+
+  /** Tramos que todavía esperan ejecución, en todas las ops */
+  const pendientesTotal = useMemo(
+    () => state.operaciones.reduce((s, o) => s + resumenTicket(o).pendientes, 0),
+    [state.operaciones]
+  );
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="page animate-in">
+      <header className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-semibold text-[var(--warm-gray-1)]">Operaciones</h1>
-          <p className="text-sm text-[var(--warm-gray-2)] mt-1">Historial de operaciones realizadas</p>
+          <h1>Mis operaciones</h1>
+          <p className="text-small m-0 mt-1" style={{ color: 'var(--warm-gray-2)' }}>
+            Tocá una operación para ver el e-ticket y cargar comprobantes
+          </p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-[var(--warm-gray-2)]">
+        <span className="flex items-center gap-1.5 text-small" style={{ color: 'var(--warm-gray-2)' }}>
           <ArrowRightLeft className="w-4 h-4" />
-          <span className="tabular">{filtered.length} total</span>
+          <span className="tabular">{filtered.length}</span>
+        </span>
+      </header>
+
+      {/* Aviso de comprobantes pendientes */}
+      {pendientesTotal > 0 && (
+        <div className="eticket-balance is-warn">
+          <Clock className="w-4 h-4 shrink-0" />
+          <span>
+            Te faltan <strong>{pendientesTotal}</strong>{' '}
+            {pendientesTotal === 1 ? 'tramo' : 'tramos'} por hacer
+          </span>
         </div>
-      </div>
+      )}
 
-      {/* Search */}
-      <div>
-        <SearchBar
-          placeholder="Buscar por código, cliente o tipo..."
-          value={search}
-          onChange={(val) => {
-            setSearch(val);
-            setPage(1);
-          }}
-          className="max-w-xl"
-        />
-      </div>
-
-      {/* Table */}
-      <div className="card rounded-xl bg-white/60 backdrop-blur-sm border border-[var(--warm-gray-5)]">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-[var(--warm-gray-5)]">
-                <th className="text-left px-5 py-3 text-xs font-medium text-[var(--warm-gray-2)]">Código</th>
-                <th className="text-left px-5 py-3 text-xs font-medium text-[var(--warm-gray-2)]">Cliente</th>
-                <th className="text-left px-5 py-3 text-xs font-medium text-[var(--warm-gray-2)]">Tipo</th>
-                <th className="text-left px-5 py-3 text-xs font-medium text-[var(--warm-gray-2)]">Estado</th>
-                <th className="text-right px-5 py-3 text-xs font-medium text-[var(--warm-gray-2)]">Fecha</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pageItems.map((op) => (
-                <tr key={op.id} className="border-b border-[var(--warm-gray-5)] last:border-0 hover:bg-[var(--warm-gray-4)]/50 transition-colors cursor-pointer">
-                  <td className="px-5 py-3 text-sm font-mono text-[var(--blue)]">{op.id}</td>
-                  <td className="px-5 py-3 text-sm text-[var(--warm-gray-1)]">{op.client}</td>
-                  <td className="px-5 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${op.type === 'Compra' ? 'badge-success' : 'badge-info'}`}>
-                      {op.type}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusClass[op.status] || 'badge-neutral'}`}>
-                      {op.status}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-sm text-right text-[var(--warm-gray-2)] tabular">{op.date}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Pagination */}
-      <Pagination
-        currentPage={safePage}
-        totalPages={totalPages}
-        onPageChange={setPage}
-        totalItems={filtered.length}
+      <SearchBar
+        placeholder="Buscar código, cliente o par…"
+        value={search}
+        onChange={setSearch}
       />
+
+      {filtered.length === 0 ? (
+        <div className="card">
+          <EmptyState icon={<Search size={26} />} title="Sin resultados"
+                      description="No se encontraron operaciones para esta búsqueda" />
+        </div>
+      ) : (
+        <ul className="list-none p-0 m-0 flex flex-col gap-2.5">
+          {filtered.map((o) => {
+            const r = resumenTicket(o);
+            const listo = r.completo;
+            const par = state.pares.find((p) => p.par === o.par);
+
+            return (
+              <li key={o.id}>
+                <button
+                  type="button"
+                  className="op-card"
+                  onClick={() => setOpenId(o.id)}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-2 min-w-0">
+                      <span className="mono text-[12px] font-bold shrink-0" style={{ color: 'var(--blue)' }}>
+                        {o.codigo}
+                      </span>
+                      <span className={`badge ${o.tipo === 'C' ? 'badge-success' : 'badge-info'} shrink-0`}>
+                        {o.tipo === 'C' ? 'Compra' : 'Venta'}
+                      </span>
+                    </span>
+                    <span className={`badge ${statusClass[o.status]} shrink-0`}>
+                      {OP_STATUS_LABEL[o.status]}
+                    </span>
+                  </div>
+
+                  <div className="flex items-baseline justify-between gap-2 mt-2">
+                    <span className="text-[15px] font-semibold truncate">
+                      {o.cliente || 'Sin cliente'}
+                    </span>
+                    <span className="tabular text-[15px] font-bold shrink-0">
+                      {fmt(o.contra, par?.quote === 'ARS' ? 0 : 2)}
+                      <span className="text-[11px] font-medium ml-1" style={{ color: 'var(--warm-gray-3)' }}>
+                        {par?.quote}
+                      </span>
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 mt-2 pt-2"
+                       style={{ borderTop: '1px solid var(--border)' }}>
+                    <span className="caption flex items-center gap-1.5" style={{ color: 'var(--warm-gray-3)' }}>
+                      <Clock className="w-3 h-3" />
+                      {o.hora} · {o.par}
+                    </span>
+
+                    {r.total > 0 ? (
+                      <span className="dep-pill" data-complete={String(listo)}>
+                        {listo ? <Check className="w-3 h-3" /> : <Paperclip className="w-3 h-3" />}
+                        {r.confirmadas}/{r.total} tramos
+                      </span>
+                    ) : (
+                      <span className="caption" style={{ color: 'var(--warm-gray-3)' }}>
+                        Sin tramos
+                      </span>
+                    )}
+                  </div>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {opAbierta && parDeAbierta && (
+        <ETicketPanel
+          op={opAbierta}
+          parDef={parDeAbierta}
+          role="cadete"
+          onClose={() => setOpenId(null)}
+        />
+      )}
     </div>
   );
 }

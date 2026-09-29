@@ -1,0 +1,842 @@
+// =============================================================
+// Oficina Fusion — Prisma Schema Unificado
+//
+// Schema que fusiona lo mejor de:
+//   Admin_caja (motor multi-par, cierre profesional, PostgreSQL)
+//   mesa-demo (roles, e-tickets, perfil completo, seguridad)
+//
+// Convención decimal:
+//   - precios/cotizaciones → @db.Decimal(18, 6)
+//   - cantidades base/quote → @db.Decimal(18, 4)
+//   - totales USD/ARS      → @db.Decimal(18, 2)
+// =============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================
+// ENUMS
+// =============================================================
+
+enum Moneda {
+  ARS
+  EUR
+  GBP
+  BRL
+  USD
+  USDT
+}
+
+enum OpTipo {
+  C // compra: caja recibe base, entrega quote
+  V // venta:  caja entrega base, recibe quote
+}
+
+enum OpStatus {
+  pendiente
+  en_ejecucion
+  finalizada
+  cancelada
+}
+
+enum Cobertura {
+  efectivo
+  saldo
+}
+
+enum ComisionMoneda {
+  quote
+  USD
+}
+
+enum GastoCategoria {
+  Comida
+  Insumos
+  Transporte
+  Servicios
+  Otros
+}
+
+enum UsdtTipo {
+  IN
+  OUT
+}
+
+enum Desk {
+  spot
+  fx
+  cripto
+  mesa
+}
+
+enum ClienteTipo {
+  Persona
+  Empresa
+}
+
+enum CierreEstado {
+  borrador
+  confirmado
+  reabierto
+}
+
+enum CableLado {
+  ingreso
+  salida
+}
+
+enum ClienteSaldoTipo {
+  debito // resta saldo (uso de saldo como cobertura, ajuste -)
+  credito // suma saldo (depósito, ajuste +)
+}
+
+enum RolUsuario {
+  ADMIN
+  CADETE
+}
+
+enum EticketEstado {
+  pendiente
+  en_curso
+  confirmado
+  cancelado
+}
+
+enum TramiteEstado {
+  pendiente
+  en_curso
+  completado
+  cancelado
+}
+
+// =============================================================
+// USUARIOS / ROLES (de mesa-demo)
+// =============================================================
+
+model Usuario {
+  id               String       @id @default(cuid())
+  username         String       @unique
+  passwordHash     String
+  nombre           String
+  roles            RolUsuario[]
+  email            String?
+  activo           Boolean      @default(true)
+  bloqueado        Boolean      @default(false)
+  bloqueadoHasta   DateTime?
+  intentosFallidos Int          @default(0)
+  primerLogin      Boolean      @default(true)
+  creadoEn         DateTime     @default(now())
+  modificadoEn     DateTime     @updatedAt
+
+  sesiones            Sesion[]
+  operaciones         Operacion[]  @relation("Operador")
+  eTicketsCreados     Eticket[]    @relation("ETicketCreador")
+  eTicketsConfirmados Eticket[]    @relation("ETicketConfirmador")
+  tramitesCreados     Tramite[]    @relation("TramiteCreador")
+  tramitesAsignados   Tramite[]    @relation("TramiteAsignado")
+  reunionesCreadas    Reunion[]    @relation("ReunionCreador")
+  comisiones          Comision[]
+  cables              Cable[]
+  cierresOperados     Cierre[]     @relation("CierreOperador")
+  auditEvents         AuditEvent[]
+  loginEvents         LoginEvent[]
+
+  @@map("usuario")
+}
+
+model Sesion {
+  id        String   @id @default(cuid())
+  usuarioId String
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
+  cookie    String   @unique
+  expiraEn  DateTime
+  creadoEn  DateTime @default(now())
+
+  @@index([expiraEn])
+  @@map("sesion")
+}
+
+// =============================================================
+// CATÁLOGOS
+// =============================================================
+
+model Par {
+  par      String  @id // "USD/ARS"
+  base     Moneda
+  quote    Moneda
+  nombre   String
+  compra   Decimal @db.Decimal(18, 6)
+  venta    Decimal @db.Decimal(18, 6)
+  varPct   Decimal @db.Decimal(8, 4)
+  decimals Int     @default(2)
+
+  operaciones  Operacion[]
+  cotizaciones CotizacionSnapshot[]
+
+  @@map("par")
+}
+
+model Cliente {
+  id               String      @id @default(cuid()) // CL-001
+  nombre           String
+  apellido         String?
+  alias            String?
+  tipo             ClienteTipo
+  doc              String?
+  // saldo rolling actualizado in-place al confirmar cierre
+  saldoUsd         Decimal     @default(0) @db.Decimal(18, 2)
+  custodia         String? // "caja" | "separada"
+  notas            String?
+  activo           Boolean     @default(true)
+  puntosHabituales Decimal?    @db.Decimal(18, 6)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  operaciones      Operacion[]
+  cables           Cable[]
+  saldosPorCierre  CierreSaldoCliente[]
+  saldoMovimientos ClienteSaldoMovimiento[]
+  telefonos        ClienteTelefono[]
+  direcciones      ClienteDireccion[]
+  cuentas          CuentaCliente[]
+  eTickets         Eticket[]
+  tramites         Tramite[]                @relation("TramiteCliente")
+  reuniones        Reunion[]
+
+  @@map("cliente")
+}
+
+model ClienteTelefono {
+  id        String  @id @default(cuid())
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  numero    String
+  tipo      String? // "celular", "fijo", "trabajo"
+  principal Boolean @default(false)
+
+  @@unique([clienteId, numero])
+  @@map("cliente_telefono")
+}
+
+model ClienteDireccion {
+  id         String  @id @default(cuid())
+  clienteId  String
+  cliente    Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  direccion  String
+  tipo       String? // "casa", "oficina", "otro"
+  ciudad     String?
+  provincia  String?
+  codigoPost String?
+  principal  Boolean @default(false)
+
+  @@unique([clienteId, direccion])
+  @@map("cliente_direccion")
+}
+
+model CuentaCliente {
+  id        String  @id @default(cuid())
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  banco     String
+  tipo      String? // "alias", "CBU", "CBU alias", "crypto", "otro"
+  numero    String
+  titular   String?
+  activo    Boolean @default(true)
+
+  @@unique([clienteId, numero])
+  @@map("cuenta_cliente")
+}
+
+// =============================================================
+// OPERATIVAS (viven sueltas durante el día)
+// =============================================================
+
+model Operacion {
+  id           String    @id @default(cuid())
+  codigo       String    @unique // OP-0001
+  numero       Int       @unique // auto-incremental
+  ts           DateTime  @default(now())
+  tsEjecucion  DateTime?
+  tsFinalizada DateTime?
+
+  tipo  OpTipo
+  parId String
+  par   Par    @relation(fields: [parId], references: [par])
+
+  monto  Decimal @db.Decimal(18, 4)
+  cotiz  Decimal @db.Decimal(18, 6)
+  contra Decimal @db.Decimal(18, 4)
+
+  cobertura Cobertura
+  status    OpStatus  @default(pendiente)
+
+  operadorId String
+  operador   Usuario @relation("Operador", fields: [operadorId], references: [id])
+
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
+  // 3 precios (de mesa-demo)
+  marketRateId String? // snapshot de mercado
+  clientRate   Decimal  @db.Decimal(18, 6)
+  puntos       Decimal? @db.Decimal(18, 6)
+  pricingMode  String? // "standard" | "precio_amigo" | "personalizado"
+
+  // Balance/saldo (de mesa-demo)
+  balanceIn  Decimal @default(0) @db.Decimal(18, 4)
+  balanceOut Decimal @default(0) @db.Decimal(18, 4)
+
+  notas String?
+
+  /// Cuando se setea, la fila se vuelve inmutable.
+  cierreId String?
+  cierre   Cierre? @relation(fields: [cierreId], references: [id])
+
+  comision Comision?
+
+  saldoMovimiento ClienteSaldoMovimiento?
+  etickets        Eticket[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([cierreId])
+  @@index([operadorId, ts])
+  @@index([parId, ts])
+  @@index([clienteId])
+  @@index([status])
+  @@map("operacion")
+}
+
+model Comision {
+  id        String     @id @default(cuid())
+  codigo    String     @unique
+  /// 1:1 con operacion (XOR con cableId)
+  opId      String?    @unique
+  operacion Operacion? @relation(fields: [opId], references: [id])
+
+  /// 1:1 con cable (XOR con opId)
+  cableId String? @unique
+  cable   Cable?  @relation(fields: [cableId], references: [id])
+
+  operadorId String
+  operador   Usuario @relation(fields: [operadorId], references: [id])
+
+  monto  Decimal        @db.Decimal(18, 4)
+  moneda ComisionMoneda @default(quote)
+  notas  String?
+
+  cierreId String?
+  cierre   Cierre? @relation(fields: [cierreId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([cierreId])
+  @@index([operadorId])
+  @@map("comision")
+}
+
+model Gasto {
+  id        String         @id @default(cuid())
+  codigo    String         @unique
+  fecha     DateTime       @default(now())
+  concepto  String
+  monto     Decimal        @db.Decimal(18, 2) /// en ARS
+  categoria GastoCategoria
+  notas     String?
+
+  cierreId String?
+  cierre   Cierre? @relation(fields: [cierreId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([cierreId])
+  @@index([fecha])
+  @@map("gasto")
+}
+
+model UsdtMovimiento {
+  id     String   @id @default(cuid())
+  codigo String   @unique
+  fecha  DateTime @default(now())
+  tipo   UsdtTipo
+  monto  Decimal  @db.Decimal(18, 4)
+  origen String
+  notas  String?
+
+  cierreId String?
+  cierre   Cierre? @relation(fields: [cierreId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([cierreId])
+  @@map("usdt_movimiento")
+}
+
+// =============================================================
+// CABLE — transferencia compuesta (1 ingreso + 1 salida)
+// =============================================================
+
+model Cable {
+  id           String    @id @default(cuid())
+  codigo       String    @unique // CB-0001
+  ts           DateTime  @default(now())
+  tsEjecucion  DateTime?
+  tsFinalizada DateTime?
+
+  status OpStatus @default(pendiente)
+
+  operadorId String
+  operador   Usuario @relation(fields: [operadorId], references: [id])
+
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
+  montoIngresoUsd Decimal @default(0) @db.Decimal(18, 2)
+  montoSalidaUsd  Decimal @default(0) @db.Decimal(18, 2)
+  diferenciaUsd   Decimal @default(0) @db.Decimal(18, 2)
+  comisionUsd     Decimal @default(0) @db.Decimal(18, 2)
+  gananciaNetaUsd Decimal @default(0) @db.Decimal(18, 2)
+
+  notas String?
+
+  cierreId String?
+  cierre   Cierre? @relation(fields: [cierreId], references: [id])
+
+  movimientos CableMovimiento[]
+  comision    Comision?
+
+  saldoMovimiento ClienteSaldoMovimiento?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([cierreId])
+  @@index([operadorId, ts])
+  @@index([clienteId])
+  @@map("cable")
+}
+
+model CableMovimiento {
+  id      String @id @default(cuid())
+  cableId String
+  cable   Cable  @relation(fields: [cableId], references: [id], onDelete: Cascade)
+
+  lado   CableLado
+  moneda Moneda    @default(USD)
+  monto  Decimal   @db.Decimal(18, 2)
+  notas  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cableId, lado])
+  @@index([cableId])
+  @@map("cable_movimiento")
+}
+
+// =============================================================
+// LEDGER DE SALDO DEL CLIENTE
+// =============================================================
+
+model ClienteSaldoMovimiento {
+  id     String   @id @default(cuid())
+  codigo String?  @unique // LD-0001
+  ts     DateTime @default(now())
+
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id])
+
+  tipo         ClienteSaldoTipo
+  montoUsd     Decimal          @db.Decimal(18, 2)
+  saldoPostUsd Decimal          @db.Decimal(18, 2)
+
+  opId      String?    @unique
+  operacion Operacion? @relation(fields: [opId], references: [id])
+  cableId   String?    @unique
+  cable     Cable?     @relation(fields: [cableId], references: [id])
+  manual    Boolean    @default(false)
+
+  nota String?
+
+  cierreId String?
+  cierre   Cierre? @relation(fields: [cierreId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clienteId, ts])
+  @@index([cierreId])
+  @@map("cliente_saldo_movimiento")
+}
+
+// =============================================================
+// CIERRE
+// =============================================================
+
+model Cierre {
+  id     String       @id @default(cuid())
+  fecha  DateTime     @unique @db.Date
+  estado CierreEstado @default(borrador)
+
+  horaApertura         String? @db.VarChar(8)
+  horaCierre           String? @db.VarChar(8)
+  operadorCierreId     String
+  operadorCierreNombre String
+  operadorCierre       Usuario @relation("CierreOperador", fields: [operadorCierreId], references: [id])
+
+  tcCierre        Decimal @db.Decimal(18, 6)
+  saldoInicialUsd Decimal @db.Decimal(18, 2)
+
+  cajaContadaUsd      Decimal @db.Decimal(18, 2)
+  posicionEsperadaUsd Decimal @db.Decimal(18, 2)
+  diferenciaUsd       Decimal @db.Decimal(18, 2)
+
+  gananciaRealizadaUsd  Decimal @db.Decimal(18, 2)
+  exposicionAbiertaUsd  Decimal @db.Decimal(18, 2)
+  netoAbiertoUsd        Decimal @db.Decimal(18, 2)
+  totalComisionesUsd    Decimal @db.Decimal(18, 2)
+  totalGastosArs        Decimal @db.Decimal(18, 2)
+  totalGastosUsd        Decimal @db.Decimal(18, 2)
+  resultadoOperativoUsd Decimal @db.Decimal(18, 2)
+
+  volumenTotalUsd Decimal @db.Decimal(18, 2)
+  nOps            Int
+
+  confirmedAt DateTime?
+  reopenedAt  DateTime?
+  notas       String?
+
+  caja            CierreCaja?
+  saldosMoneda    CierreSaldoMoneda[]
+  resultadosPar   CierreResultadoPar[]
+  operadores      CierreOperador[]
+  saldosCliente   CierreSaldoCliente[]
+  gastosCategoria CierreGastoCategoria[]
+
+  operaciones      Operacion[]
+  comisiones       Comision[]
+  gastos           Gasto[]
+  usdtMovs         UsdtMovimiento[]
+  cables           Cable[]
+  saldoMovimientos ClienteSaldoMovimiento[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([fecha])
+  @@map("cierre")
+}
+
+model CierreCaja {
+  cierreId        String  @id
+  cierre          Cierre  @relation(fields: [cierreId], references: [id], onDelete: Cascade)
+  usd100          Decimal @db.Decimal(18, 2)
+  usdResto        Decimal @db.Decimal(18, 2)
+  totalArs        Decimal @db.Decimal(18, 2)
+  totalEur        Decimal @db.Decimal(18, 2)
+  totalGbp        Decimal @db.Decimal(18, 2)
+  totalBrl        Decimal @db.Decimal(18, 2)
+  totalUsdContado Decimal @db.Decimal(18, 2)
+
+  @@map("cierre_caja")
+}
+
+model CierreSaldoMoneda {
+  id              String  @id @default(cuid())
+  cierreId        String
+  cierre          Cierre  @relation(fields: [cierreId], references: [id], onDelete: Cascade)
+  moneda          Moneda
+  cantidadInicial Decimal @db.Decimal(18, 4)
+  cantidadFinal   Decimal @db.Decimal(18, 4)
+  cotizUsd        Decimal @db.Decimal(18, 6)
+  usdEquivCierre  Decimal @db.Decimal(18, 2)
+
+  @@unique([cierreId, moneda])
+  @@map("cierre_saldo_moneda")
+}
+
+model CierreResultadoPar {
+  id       String @id @default(cuid())
+  cierreId String
+  cierre   Cierre @relation(fields: [cierreId], references: [id], onDelete: Cascade)
+  par      String
+  base     Moneda
+  quote    Moneda
+
+  nOps         Int
+  comprasBase  Decimal @db.Decimal(18, 4)
+  comprasQuote Decimal @db.Decimal(18, 4)
+  ventasBase   Decimal @db.Decimal(18, 4)
+  ventasQuote  Decimal @db.Decimal(18, 4)
+  promCompra   Decimal @db.Decimal(18, 6)
+  promVenta    Decimal @db.Decimal(18, 6)
+  spread       Decimal @db.Decimal(18, 6)
+
+  matchedBase   Decimal @db.Decimal(18, 4)
+  realizedQuote Decimal @db.Decimal(18, 4)
+  realizedUsd   Decimal @db.Decimal(18, 2)
+
+  openBase      Decimal @db.Decimal(18, 4)
+  openExecPrice Decimal @db.Decimal(18, 6)
+  openUsd       Decimal @db.Decimal(18, 2)
+
+  volumenBase   Decimal @db.Decimal(18, 4)
+  volumenQuote  Decimal @db.Decimal(18, 4)
+  volumenUsd    Decimal @db.Decimal(18, 2)
+  comisionesUsd Decimal @db.Decimal(18, 2)
+
+  @@unique([cierreId, par])
+  @@map("cierre_resultado_par")
+}
+
+model CierreOperador {
+  id               String @id @default(cuid())
+  cierreId         String
+  cierre           Cierre @relation(fields: [cierreId], references: [id], onDelete: Cascade)
+  operadorId       String
+  operadorInitials String @db.VarChar(8)
+  operadorNombre   String
+  desk             String
+
+  nOps               Int
+  volumenUsd         Decimal @db.Decimal(18, 2)
+  comisionesUsd      Decimal @db.Decimal(18, 2)
+  pendientesComision Int
+  spreadMedioUsd     Decimal @db.Decimal(18, 6)
+
+  @@unique([cierreId, operadorId])
+  @@map("cierre_operador")
+}
+
+model CierreSaldoCliente {
+  id               String  @id @default(cuid())
+  cierreId         String
+  cierre           Cierre  @relation(fields: [cierreId], references: [id], onDelete: Cascade)
+  clienteId        String
+  cliente          Cliente @relation(fields: [clienteId], references: [id])
+  clienteNombre    String
+  saldoUsdApertura Decimal @db.Decimal(18, 2)
+  saldoUsdCierre   Decimal @db.Decimal(18, 2)
+  deltaUsd         Decimal @db.Decimal(18, 2)
+  nOpsDia          Int
+  volumenUsdDia    Decimal @db.Decimal(18, 2)
+
+  @@unique([cierreId, clienteId])
+  @@map("cierre_saldo_cliente")
+}
+
+model CierreGastoCategoria {
+  id        String         @id @default(cuid())
+  cierreId  String
+  cierre    Cierre         @relation(fields: [cierreId], references: [id], onDelete: Cascade)
+  categoria GastoCategoria
+  nItems    Int
+  totalArs  Decimal        @db.Decimal(18, 2)
+  totalUsd  Decimal        @db.Decimal(18, 2)
+
+  @@unique([cierreId, categoria])
+  @@map("cierre_gasto_categoria")
+}
+
+// =============================================================
+// COTIZACIONES (snapshots, de mesa-demo)
+// =============================================================
+
+model CotizacionSnapshot {
+  id       String   @id @default(cuid())
+  parId    String
+  par      Par      @relation(fields: [parId], references: [par])
+  buyRate  Decimal  @db.Decimal(18, 6)
+  sellRate Decimal  @db.Decimal(18, 6)
+  fuente   String? // "manual" | "automática" | "API"
+  creadoEn DateTime @default(now())
+
+  @@index([creadoEn])
+  @@index([parId, creadoEn])
+  @@map("cotizacion_snapshot")
+}
+
+// =============================================================
+// E-TICKETS (de mesa-demo, mobile-first)
+// =============================================================
+
+model Eticket {
+  id     String   @id @default(cuid())
+  numero Int      @unique
+  codigo String   @unique // ET-0001
+  ts     DateTime @default(now())
+
+  operationId     String?    @unique
+  operation       Operacion? @relation(fields: [operationId], references: [id])
+
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id])
+
+  estado EticketEstado @default(pendiente)
+
+  // Datos de entrega (no muestra datos económicos)
+  metodoEntrega   String     // "en_mano" | "deposito_banco"
+  direccionEntrega String?
+  telefonoContacto String?
+  nombreRecibe    String?
+  horarioEntrega  String?
+  banco           String?
+  cuentaDeposito  String?
+  instrucciones   String?
+
+  // Montos para el cadete (cuánto entregar, cuánto recibir)
+  monedaEntregar  Moneda?
+  montoEntregar   Decimal?   @db.Decimal(18, 4)
+  monedaRecibir   Moneda?
+  montoRecibir    Decimal?   @db.Decimal(18, 4)
+
+  confirmadoPor   String?
+  confirmadoPorUsuario Usuario? @relation("ETicketConfirmador", fields: [confirmadoPor], references: [id])
+  confirmadoEn    DateTime?
+
+  creadoPor       String
+  creadoPorUsuario Usuario? @relation("ETicketCreador", fields: [creadoPor], references: [id])
+  creadoEn         DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([estado])
+  @@index([clienteId])
+  @@map("eticket")
+}
+
+// =============================================================
+// TRÁMITES (nuevo — e-tickets internos de oficina)
+// =============================================================
+
+model Tramite {
+  id              String        @id @default(cuid())
+  codigo          String        @unique // TR-0001
+  titulo          String
+  descripcion     String?
+  estado          TramiteEstado @default(pendiente)
+  prioridad       String? // "alta" | "media" | "baja"
+  fechaLimite     DateTime?
+  fechaCreacion   DateTime      @default(now())
+  fechaCompletado DateTime?
+  notas           String?
+
+  clienteId String?
+  cliente   Cliente? @relation("TramiteCliente", fields: [clienteId], references: [id])
+
+  creadoPor        String
+  creadoPorUsuario Usuario? @relation("TramiteCreador", fields: [creadoPor], references: [id])
+  asignadoA        String?
+  asignadoAUsuario Usuario? @relation("TramiteAsignado", fields: [asignadoA], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([estado])
+  @@index([asignadoA])
+  @@index([fechaLimite])
+  @@map("tramite")
+}
+
+// =============================================================
+// AGENDA / REUNIONES (nuevo)
+// =============================================================
+
+model Reunion {
+  id          String   @id @default(cuid())
+  titulo      String
+  descripcion String?
+  inicio      DateTime
+  fin         DateTime
+  lugar       String?
+  tipo        String? // "cliente" | "interna" | "trámite"
+
+  creadaPor        String
+  creadaPorUsuario Usuario? @relation("ReunionCreador", fields: [creadaPor], references: [id])
+
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
+  asistentes           String[] // ids de usuarios
+  recurrente           Boolean  @default(false)
+  recurrenteFrecuencia String? // "diario" | "semanal" | "mensual"
+
+  notas String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([inicio])
+  @@index([clienteId])
+  @@map("reunion")
+}
+
+// =============================================================
+// AUDITORÍA (de mesa-demo)
+// =============================================================
+
+model AuditEvent {
+  id        String   @id @default(cuid())
+  usuarioId String?
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+  accion    String // "operation.create", "ticket.confirm", etc.
+  entidad   String // "Operation", "ETicket", etc.
+  entidadId String?
+  detalles  String? // JSON string
+  ip        String?
+  userAgent String?
+  creadoEn  DateTime @default(now())
+
+  @@index([accion])
+  @@index([creadoEn])
+  @@index([entidad, entidadId])
+  @@map("audit_event")
+}
+
+// =============================================================
+// EVENTOS DE LOGIN (de mesa-demo)
+// =============================================================
+
+model LoginEvent {
+  id          String   @id @default(cuid())
+  usuarioId   String?
+  usuario     Usuario? @relation(fields: [usuarioId], references: [id])
+  exitoso     Boolean
+  ip          String?
+  userAgent   String?
+  motivoFallo String?
+  creadoEn    DateTime @default(now())
+
+  @@index([creadoEn])
+  @@map("login_event")
+}
+
+// =============================================================
+// ERRORES DEL SERVIDOR (de mesa-demo)
+// =============================================================
+
+model ErrorLog {
+  id        String   @id @default(cuid())
+  mensaje   String
+  detalle   String?
+  pila      String?
+  url       String?
+  metodo    String?
+  ip        String?
+  userAgent String?
+  creadoEn  DateTime @default(now())
+
+  @@index([creadoEn])
+  @@map("error_log")
+}

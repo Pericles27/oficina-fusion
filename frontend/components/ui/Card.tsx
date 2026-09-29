@@ -98,7 +98,7 @@ export interface CardDescriptionProps extends HTMLAttributes<HTMLParagraphElemen
 
 const CardDescription = forwardRef<HTMLParagraphElement, CardDescriptionProps>(
   ({ children, className = '', ...props }, ref) => (
-    <p ref={ref} className={cn('text-sm text-warm-gray-3 mt-1', className)} style={{ color: 'var(--warm-gray-3)' }} {...props}>
+    <p ref={ref} className={cn('text-sm text-warm-gray-3 mt-1', className)} {...props}>
       {children}
     </p>
   )

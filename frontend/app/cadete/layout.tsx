@@ -1,103 +1,24 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import {
-  LayoutDashboard,
-  ArrowRightLeft,
-  FileText,
-  User,
-  Menu,
-  X,
-} from 'lucide-react';
+import { LayoutDashboard, ArrowRightLeft, FileText, User } from 'lucide-react';
+import { AppShell, type NavEntry } from '@/components/AppShell';
 
-const navItems = [
-  { label: 'Dashboard', href: '/cadete', icon: LayoutDashboard },
-  { label: 'Nueva Operación', href: '/cadete/operations', icon: ArrowRightLeft },
-  { label: 'E-Tickets', href: '/cadete/tickets', icon: FileText },
-  { label: 'Mi Perfil', href: '/cadete/profile', icon: User },
+const nav: NavEntry[] = [
+  { label: 'Dashboard', short: 'Inicio', href: '/cadete', icon: LayoutDashboard },
+  { label: 'Operaciones', short: 'Ops', href: '/cadete/operations', icon: ArrowRightLeft },
+  { label: 'E-Tickets', short: 'Tickets', href: '/cadete/tickets', icon: FileText },
+  { label: 'Mi Perfil', short: 'Perfil', href: '/cadete/profile', icon: User },
 ];
 
 export default function CadeteLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-
   return (
-    <div className="flex h-screen bg-[var(--bg-base)] overflow-hidden">
-      {/* Sidebar */}
-      <aside
-        className={`flex flex-col bg-white/70 backdrop-blur-xl border-r border-[var(--warm-gray-5)] transition-all duration-300 ${
-          sidebarOpen ? 'w-64' : 'w-16'
-        }`}
-      >
-        {/* Logo */}
-        <div className="flex items-center justify-between px-4 py-4 border-b border-[var(--warm-gray-5)]">
-          <Link href="/cadete" className="flex items-center gap-2 cursor-pointer select-none">
-            <div className="w-8 h-8 rounded-lg bg-[var(--blue)] flex items-center justify-center">
-              <ArrowRightLeft className="w-5 h-5 text-white" />
-            </div>
-            {sidebarOpen && (
-              <span className="text-lg font-semibold text-[var(--warm-gray-1)]">Cadete</span>
-            )}
-          </Link>
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-1 rounded-md hover:bg-[var(--warm-gray-4)] transition-colors cursor-pointer"
-          >
-            {sidebarOpen ? (
-              <X className="w-5 h-5 text-[var(--warm-gray-2)]" />
-            ) : (
-              <Menu className="w-5 h-5 text-[var(--warm-gray-2)]" />
-            )}
-          </button>
-        </div>
-
-        {/* Nav Items */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
-            const active = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all cursor-pointer select-none ${
-                  active
-                    ? 'bg-[var(--blue)] text-white shadow-sm'
-                    : 'text-[var(--warm-gray-2)] hover:bg-[var(--warm-gray-4)] hover:text-[var(--warm-gray-1)]'
-                }`}
-              >
-                <item.icon className="w-5 h-5 shrink-0" />
-                {sidebarOpen && <span className="truncate">{item.label}</span>}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* User info */}
-        {sidebarOpen && (
-          <div className="px-4 py-4 border-t border-[var(--warm-gray-5)]">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--blue)] to-[#5856D6] flex items-center justify-center text-white text-sm font-medium">
-                CA
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[var(--warm-gray-1)] truncate">
-                  Carlos Aguilera
-                </p>
-                <p className="text-xs text-[var(--warm-gray-2)] truncate">
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium badge-blue">
-                    Cadete
-                  </span>
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">{children}</main>
-    </div>
+    <AppShell
+      brand="Cadete"
+      brandIcon={ArrowRightLeft}
+      nav={nav}
+      user={{ name: 'Carlos Aguilera', role: 'Cadete', initials: 'CA' }}
+    >
+      {children}
+    </AppShell>
   );
 }

@@ -1,16 +1,29 @@
 'use client';
 
 import { Toaster as SonnerToaster } from 'sonner';
+import { useTheme } from '@/app/providers';
 
 function Toaster() {
+  const { theme } = useTheme();
+
   return (
     <SonnerToaster
-      position="top-right"
+      theme={theme}
+      position="top-center"
       richColors
       closeButton
       duration={4000}
-      style={{
-        fontFamily: 'var(--font-ui)',
+      offset="calc(12px + env(safe-area-inset-top))"
+      toastOptions={{
+        style: {
+          fontFamily: 'var(--font-ui)',
+          borderRadius: 'var(--radius-sm)',
+          background: 'var(--glass-bg)',
+          backdropFilter: 'blur(20px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+          border: '1px solid var(--glass-border)',
+          color: 'var(--warm-gray-1)',
+        },
       }}
     />
   );

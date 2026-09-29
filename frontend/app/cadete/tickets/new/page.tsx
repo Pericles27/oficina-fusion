@@ -1,223 +1,153 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { ArrowLeft, Send, User, FileText, Mail, MessageSquare, CheckCircle } from 'lucide-react';
+import { useState } from 'react';
 import Link from 'next/link';
-import { Button } from '@/components/ui';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft, Save, Send, FileText, User, DollarSign } from 'lucide-react';
 import { Input, Select, Textarea } from '@/components/ui';
-import { Badge } from '@/components/ui';
-import { toast } from 'sonner';
 
-const clients = [
-  { id: '1', name: 'Carlos Méndez', document: '30.123.456-7' },
-  { id: '2', name: 'Ana Rodríguez', document: '27.654.321-9' },
-  { id: '3', name: 'Miguel Torres', document: '33.789.012-3' },
-  { id: '4', name: 'Laura Sánchez', document: '25.456.789-1' },
-  { id: '5', name: 'Roberto Díaz', document: '29.987.654-8' },
-];
-
-const ticketTypes = [
-  { value: 'CFE', label: 'CFE (Comprobante Fiscal Electrónico)' },
+const tipoOptions = [
+  { value: 'CFE', label: 'CFE — Comp. Fiscal Electrónico' },
   { value: 'Factura B', label: 'Factura B' },
   { value: 'Recibo', label: 'Recibo' },
 ];
 
+const monedaOptions = [
+  { value: 'USD', label: 'USD — Dólar' },
+  { value: 'ARS', label: 'ARS — Peso' },
+  { value: 'EUR', label: 'EUR — Euro' },
+];
+
 export default function NewTicketPage() {
-  const [selectedClient, setSelectedClient] = useState('');
-  const [ticketType, setTicketType] = useState('');
-  const [deliveryMethod, setDeliveryMethod] = useState('');
-  const [notes, setNotes] = useState('');
-  const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
+  const router = useRouter();
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    tipo: 'CFE',
+    cliente: '',
+    dni: '',
+    email: '',
+    moneda: 'USD',
+    monto: '',
+    tasa: '1050',
+    concepto: '',
+    notas: '',
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const client = useMemo(
-    () => clients.find((c) => c.id === selectedClient),
-    [selectedClient]
-  );
+  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+    setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedClient || !ticketType || !deliveryMethod) {
-      toast.error('Completa todos los campos requeridos');
-      return;
-    }
-    setSending(true);
-    // Simulate API call
-    await new Promise((r) => setTimeout(r, 800));
-    setSending(false);
-    setSent(true);
-    toast.success('E-Ticket enviado correctamente');
+  const total = (() => {
+    const m = parseFloat(form.monto);
+    const t = parseFloat(form.tasa);
+    return Number.isNaN(m) || Number.isNaN(t) ? 0 : m * t;
+  })();
+
+  const validate = () => {
+    const e: Record<string, string> = {};
+    if (!form.cliente.trim()) e.cliente = 'Ingresá el nombre del cliente';
+    if (!form.dni.trim()) e.dni = 'Ingresá el DNI';
+    if (!form.monto || parseFloat(form.monto) <= 0) e.monto = 'Ingresá un monto válido';
+    if (form.email && !/^\S+@\S+\.\S+$/.test(form.email)) e.email = 'Email inválido';
+    setErrors(e);
+    return Object.keys(e).length === 0;
   };
 
-  if (sent) {
-    return (
-      <div className="p-6 space-y-6 max-w-xl">
-        <Link
-          href="/cadete/tickets"
-          className="flex items-center gap-2 text-sm text-[var(--blue)] hover:underline cursor-pointer select-none"
-        >
+  const submit = async (send: boolean) => {
+    if (!validate()) return;
+    setSaving(true);
+    await new Promise((r) => setTimeout(r, 600));
+    setSaving(false);
+    router.push('/cadete/tickets');
+  };
+
+  return (
+    <div className="page animate-in">
+      <header className="flex flex-col gap-3">
+        <Link href="/cadete/tickets"
+              className="inline-flex items-center gap-1.5 text-small no-underline w-fit"
+              style={{ color: 'var(--warm-gray-2)' }}>
           <ArrowLeft className="w-4 h-4" />
           Volver a E-Tickets
         </Link>
-
-        <div className="card p-10 rounded-xl bg-white/60 backdrop-blur-sm border border-[var(--warm-gray-5)] text-center">
-          <div className="w-16 h-16 rounded-full bg-[var(--success)]/10 flex items-center justify-center mx-auto mb-4">
-            <CheckCircle className="w-8 h-8 text-[var(--success)]" />
-          </div>
-          <h2 className="text-xl font-semibold text-[var(--warm-gray-1)]">Ticket enviado</h2>
-          <p className="text-sm text-[var(--warm-gray-2)] mt-2">
-            El comprobante fue enviado a {client?.name} vía {deliveryMethod === 'sms' ? 'SMS' : 'Email'}
+        <div>
+          <h1>Nuevo E-Ticket</h1>
+          <p className="text-small m-0 mt-1" style={{ color: 'var(--warm-gray-2)' }}>
+            Generar comprobante electrónico
           </p>
-          <div className="mt-6">
-            <Link href="/cadete/tickets">
-              <Button variant="primary">Ver todos los tickets</Button>
-            </Link>
+        </div>
+      </header>
+
+      <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); submit(false); }}>
+        {/* Tipo */}
+        <section className="card p-5 flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            <FileText className="w-[18px] h-[18px]" style={{ color: 'var(--blue)' }} />
+            <span className="label">Tipo de comprobante</span>
           </div>
-        </div>
-      </div>
-    );
-  }
+          <Select options={tipoOptions} value={form.tipo} onChange={set('tipo')} aria-label="Tipo" />
+        </section>
 
-  return (
-    <div className="p-6 space-y-6 max-w-xl">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link href="/cadete/tickets">
-            <ArrowLeft className="w-5 h-5 text-[var(--warm-gray-2)] cursor-pointer hover:text-[var(--warm-gray-1)] transition-colors" />
-          </Link>
-          <div>
-            <h1 className="text-xl font-semibold text-[var(--warm-gray-1)]">Nuevo E-Ticket</h1>
-            <p className="text-sm text-[var(--warm-gray-2)]">Generar comprobante electrónico</p>
+        {/* Cliente */}
+        <section className="card p-5 flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            <User className="w-[18px] h-[18px]" style={{ color: 'var(--blue)' }} />
+            <span className="label">Datos del cliente</span>
           </div>
-        </div>
-      </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input label="Nombre completo" placeholder="Carlos Méndez"
+                   value={form.cliente} onChange={set('cliente')} error={errors.cliente} required />
+            <Input label="DNI / CUIT" placeholder="30.456.789" inputMode="numeric"
+                   value={form.dni} onChange={set('dni')} error={errors.dni} required />
+          </div>
+          <Input label="Email" type="email" placeholder="cliente@email.com"
+                 helperText="Opcional — para enviar el comprobante"
+                 value={form.email} onChange={set('email')} error={errors.email} />
+        </section>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Client */}
-        <div className="card p-5 rounded-xl bg-white/60 backdrop-blur-sm border border-[var(--warm-gray-5)]">
-          <h3 className="text-sm font-semibold text-[var(--warm-gray-1)] mb-4 flex items-center gap-2">
-            <User className="w-4 h-4" />
-            Cliente
-          </h3>
-          <Select
-            value={selectedClient}
-            onChange={(e) => setSelectedClient(e.target.value)}
-            placeholder="Seleccionar cliente..."
-            options={clients.map((c) => ({ value: c.id, label: `${c.name} — ${c.document}` }))}
-            required
-          />
-          {client && (
-            <div className="mt-3 p-3 rounded-lg bg-[var(--bg-base)]">
-              <p className="text-sm font-medium text-[var(--warm-gray-1)]">{client.name}</p>
-              <p className="text-xs text-[var(--warm-gray-2)]">DNI/CUIT: {client.document}</p>
-            </div>
-          )}
-        </div>
+        {/* Montos */}
+        <section className="card p-5 flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            <DollarSign className="w-[18px] h-[18px]" style={{ color: 'var(--blue)' }} />
+            <span className="label">Importe</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Select label="Moneda" options={monedaOptions} value={form.moneda} onChange={set('moneda')} />
+            <Input label="Monto" type="number" inputMode="decimal" placeholder="0,00" step="0.01"
+                   value={form.monto} onChange={set('monto')} error={errors.monto} required />
+            <Input label="Tasa" type="number" inputMode="decimal" placeholder="1050" step="0.01"
+                   value={form.tasa} onChange={set('tasa')} />
+          </div>
 
-        {/* Ticket Type */}
-        <div className="card p-5 rounded-xl bg-white/60 backdrop-blur-sm border border-[var(--warm-gray-5)]">
-          <h3 className="text-sm font-semibold text-[var(--warm-gray-1)] mb-4 flex items-center gap-2">
-            <FileText className="w-4 h-4" />
-            Tipo de comprobante
-          </h3>
-          <Select
-            value={ticketType}
-            onChange={(e) => setTicketType(e.target.value)}
-            placeholder="Seleccionar tipo..."
-            options={ticketTypes.map((t) => ({ value: t.value, label: t.label }))}
-            required
-          />
-        </div>
+          <div className="flex items-center justify-between gap-3 pt-4 flex-wrap"
+               style={{ borderTop: '1px solid var(--border)' }}>
+            <span className="label">Total ARS</span>
+            <span className="text-[22px] font-bold currency" style={{ color: 'var(--blue)' }}>
+              ${total.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+        </section>
 
-        {/* Delivery Method */}
-        <div className="card p-5 rounded-xl bg-white/60 backdrop-blur-sm border border-[var(--warm-gray-5)]">
-          <h3 className="text-sm font-semibold text-[var(--warm-gray-1)] mb-4 flex items-center gap-2">
+        {/* Detalle */}
+        <section className="card p-5 flex flex-col gap-4">
+          <span className="label">Detalle</span>
+          <Input label="Concepto" placeholder="Compra de divisas"
+                 value={form.concepto} onChange={set('concepto')} />
+          <Textarea label="Notas internas" rows={3} placeholder="Observaciones (no se imprimen)"
+                    value={form.notas} onChange={set('notas')} />
+        </section>
+
+        {/* Acciones al final del formulario (sin sticky: no tapa campos) */}
+        <div className="flex flex-col xs:flex-row gap-2.5 pt-1">
+          <button type="submit" className="btn btn-secondary btn-full xs:w-auto" disabled={saving}>
+            <Save className="w-4 h-4" />
+            Guardar borrador
+          </button>
+          <button type="button" className="btn btn-primary btn-full xs:flex-1"
+                  onClick={() => submit(true)} disabled={saving}>
             <Send className="w-4 h-4" />
-            Método de envío
-          </h3>
-          <div className="grid grid-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setDeliveryMethod('sms')}
-              className={`p-4 rounded-lg border-2 text-center transition-all cursor-pointer ${
-                deliveryMethod === 'sms'
-                  ? 'border-[var(--blue)] bg-[var(--blue-subtle)]'
-                  : 'border-[var(--warm-gray-5)] hover:border-[var(--warm-gray-4)]'
-              }`}
-            >
-              <MessageSquare className={`w-6 h-6 mx-auto mb-2 ${deliveryMethod === 'sms' ? 'text-[var(--blue)]' : 'text-[var(--warm-gray-2)]'}`} />
-              <p className="text-sm font-medium text-[var(--warm-gray-1)]">SMS</p>
-              <p className="text-xs text-[var(--warm-gray-2)] mt-0.5">Al celular del cliente</p>
-            </button>
-            <button
-              type="button"
-              onClick={() => setDeliveryMethod('email')}
-              className={`p-4 rounded-lg border-2 text-center transition-all cursor-pointer ${
-                deliveryMethod === 'email'
-                  ? 'border-[var(--blue)] bg-[var(--blue-subtle)]'
-                  : 'border-[var(--warm-gray-5)] hover:border-[var(--warm-gray-4)]'
-              }`}
-            >
-              <Mail className={`w-6 h-6 mx-auto mb-2 ${deliveryMethod === 'email' ? 'text-[var(--blue)]' : 'text-[var(--warm-gray-2)]'}`} />
-              <p className="text-sm font-medium text-[var(--warm-gray-1)]">Email</p>
-              <p className="text-xs text-[var(--warm-gray-2)] mt-0.5">Al email del cliente</p>
-            </button>
-          </div>
-        </div>
-
-        {/* Notes */}
-        <div className="card p-5 rounded-xl bg-white/60 backdrop-blur-sm border border-[var(--warm-gray-5)]">
-          <h3 className="text-sm font-semibold text-[var(--warm-gray-1)] mb-4 flex items-center gap-2">
-            <MessageSquare className="w-4 h-4" />
-            Notas internas
-          </h3>
-          <Textarea
-            placeholder="Notas para referencia (opcional)..."
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={3}
-          />
-        </div>
-
-        {/* Preview */}
-        {selectedClient && ticketType && (
-          <div className="card p-5 rounded-xl bg-white/60 backdrop-blur-sm border border-[var(--warm-gray-5)]">
-            <h3 className="text-sm font-semibold text-[var(--warm-gray-1)] mb-3">Vista previa del ticket</h3>
-            <div className="p-4 rounded-lg bg-[var(--bg-base)] border border-[var(--warm-gray-5)]">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-medium text-[var(--warm-gray-2)] uppercase tracking-wide">E-Ticket</span>
-                <Badge variant="info" size="sm">
-                  {ticketType}
-                </Badge>
-              </div>
-              <p className="text-sm text-[var(--warm-gray-1)]">
-                <span className="text-[var(--warm-gray-2)]">Para: </span>
-                {client?.name}
-              </p>
-              <p className="text-sm text-[var(--warm-gray-1)] mt-1">
-                <span className="text-[var(--warm-gray-2)]">Enviar vía: </span>
-                {deliveryMethod === 'sms' ? 'SMS' : deliveryMethod === 'email' ? 'Email' : '—'}
-              </p>
-              <p className="text-xs text-[var(--warm-gray-2)] mt-2">
-                {new Date().toLocaleDateString('es-AR', {
-                  day: '2-digit', month: 'long', year: 'numeric',
-                  hour: '2-digit', minute: '2-digit',
-                })}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex items-center gap-3 pt-2">
-          <Link href="/cadete/tickets">
-            <Button variant="ghost">Cancelar</Button>
-          </Link>
-          <Button variant="primary" loading={sending} className="flex-1 justify-center gap-2">
-            <Send className="w-4 h-4" />
-            {sending ? 'Enviando...' : 'Enviar E-Ticket'}
-          </Button>
+            {saving ? 'Generando…' : 'Generar y enviar'}
+          </button>
         </div>
       </form>
     </div>

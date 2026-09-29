@@ -1,0 +1,10 @@
+[build]
+command = "pnpm install --frozen-lockfile && pnpm run build"
+publish = "frontend/out"
+
+[[plugins]]
+package = "@netlify/plugin-nextjs"
+
+[build.environment]
+NEXT_TELEMETRY_DISABLED = "1"
+NETLIFY_NEXT_PLUGIN_SKIP_PRISMA_GENERATE = "true"

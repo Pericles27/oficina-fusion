@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, ImgHTMLAttributes, ReactNode } from 'react';
+import { forwardRef, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { User } from 'lucide-react';
 
@@ -15,56 +15,53 @@ export interface AvatarProps {
   className?: string;
 }
 
+const sizeClassMap = {
+  sm: 'avatar-sm',
+  md: 'avatar-md',
+  lg: 'avatar-lg',
+  xl: 'avatar-xl',
+} as const;
+
+const statusColors: Record<string, string> = {
+  online: 'var(--success)',
+  offline: 'var(--warm-gray-4)',
+  away: 'var(--warning)',
+  busy: 'var(--danger)',
+};
+
 const Avatar = forwardRef<HTMLSpanElement, AvatarProps>(
-  (
-    { src, alt, initials, icon, size = 'md', status = null, bordered = false, className = '' },
-    ref
-  ) => {
-    const sizeClass = size === 'sm' ? 'avatar-sm' : size === 'lg' ? 'avatar-lg' : size === 'xl' ? 'avatar-xl' : 'avatar-md';
-    const borderClass = bordered ? 'ring-2 ring-white dark:ring-gray-800' : '';
-    const sizeStyle =
-      size === 'sm'
-        ? { width: 24, height: 24 }
-        : size === 'lg'
-          ? { width: 40, height: 40 }
-          : size === 'xl'
-            ? { width: 56, height: 56 }
-            : { width: 32, height: 32 };
+  ({ src, alt, initials, icon, size = 'md', status = null, bordered = false, className = '' }, ref) => (
+    <span
+      ref={ref}
+      className={cn('avatar', 'relative', sizeClassMap[size], className)}
+      style={bordered ? { outline: '2px solid var(--bg-surface)', outlineOffset: 0 } : undefined}
+      role="img"
+      aria-label={alt || (initials ? `Avatar ${initials}` : 'Avatar')}
+    >
+      {src ? (
+        <img src={src} alt={alt || ''} />
+      ) : initials ? (
+        <span>{initials.toUpperCase()}</span>
+      ) : icon ? (
+        icon
+      ) : (
+        <User className="w-3/5 h-3/5 opacity-50" />
+      )}
 
-    const statusColors: Record<string, string> = {
-      online: 'var(--success)',
-      offline: 'var(--warm-gray-4)',
-      away: 'var(--warning)',
-      busy: 'var(--danger)',
-    };
-
-    return (
-      <span
-        ref={ref}
-        className={cn('avatar', sizeClass, borderClass, className)}
-        style={sizeStyle}
-        role="img"
-        aria-label={alt || `Avatar ${initials || ''}`}
-      >
-        {src ? (
-          <img src={src} alt={alt || ''} />
-        ) : initials ? (
-          <span className="text-xs font-semibold">{initials.toUpperCase()}</span>
-        ) : icon ? (
-          icon
-        ) : (
-          <User className="w-3/5 h-3/5 opacity-40" />
-        )}
-        {status && (
-          <span
-            className="absolute bottom-0 right-0 block w-[35%] h-[35%] rounded-full ring-2 ring-white dark:ring-gray-800"
-            style={{ backgroundColor: statusColors[status] }}
-            aria-label={`Estado: ${status}`}
-          />
-        )}
-      </span>
-    );
-  }
+      {status && (
+        <span
+          className="absolute bottom-0 right-0 block rounded-full"
+          style={{
+            width: '32%',
+            height: '32%',
+            backgroundColor: statusColors[status],
+            boxShadow: '0 0 0 2px var(--bg-surface)',
+          }}
+          aria-label={`Estado: ${status}`}
+        />
+      )}
+    </span>
+  )
 );
 
 Avatar.displayName = 'Avatar';

@@ -2,99 +2,64 @@
 
 import {
   forwardRef,
-  InputHTMLAttributes,
-  SelectHTMLAttributes,
-  TextareaHTMLAttributes,
-  ReactNode,
   useId,
+  type InputHTMLAttributes,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
+  type ReactNode,
 } from 'react';
-import { Search, Eye, EyeOff, X } from 'lucide-react';
+
+/* ─── Input ─── */
 
 export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'prefix'> {
   label?: string;
   helperText?: string;
   error?: string;
-  icon?: ReactNode;
-  suffixIcon?: ReactNode;
-  floatingLabel?: boolean;
   prefixIcon?: ReactNode;
-  prefix?: ReactNode | string;
-  suffix?: ReactNode;
+  suffixIcon?: ReactNode;
 }
 
 const Input = forwardRef<HTMLInputElement, InputProps>(
-  (
-    {
-      label,
-      helperText,
-      error,
-      icon,
-      suffixIcon,
-      floatingLabel = false,
-      prefixIcon,
-      prefix,
-      suffix,
-      className = '',
-      type = 'text',
-      id,
-      ...props
-    },
-    ref
-  ) => {
-    const inputId = id || useId();
-    const isPassword = type === 'password';
-    const hasIcon = icon || prefixIcon || prefix || suffixIcon || suffix;
-    const isSearch = type === 'search';
+  ({ label, helperText, error, prefixIcon, suffixIcon, className = '', type = 'text', id, ...props }, ref) => {
+    const autoId = useId();
+    const inputId = id || autoId;
 
     return (
       <div className={`flex flex-col gap-1.5 ${className}`}>
-        {label && (
-          <label
-            htmlFor={inputId}
-            className={floatingLabel ? 'label' : 'label'}
-          >
-            {label}
-          </label>
-        )}
+        {label && <label htmlFor={inputId} className="label">{label}</label>}
+
         <div className="relative">
-          {(prefixIcon || prefix) && (
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center">
-              {prefixIcon || prefix}
-            </div>
+          {prefixIcon && (
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center pointer-events-none"
+                  style={{ color: 'var(--warm-gray-3)' }}>
+              {prefixIcon}
+            </span>
           )}
           <input
             ref={ref}
             id={inputId}
             type={type}
-            className={`input ${error ? '!border-red-500 !ring-1 !ring-red-500' : ''} ${
-              hasIcon ? 'pl-9' : ''
-            }`}
+            className="input"
+            style={{
+              ...(prefixIcon ? { paddingLeft: 42 } : null),
+              ...(suffixIcon ? { paddingRight: 42 } : null),
+              ...(error ? { borderColor: 'var(--danger)' } : null),
+            }}
             aria-invalid={!!error}
             aria-describedby={helperText || error ? `${inputId}-help` : undefined}
             {...props}
           />
-          {(suffixIcon || suffix || isPassword) && (
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
-              {suffixIcon || suffix}
-              {isPassword && (
-                <button
-                  type="button"
-                  className="btn-icon w-5 h-5"
-                  tabIndex={-1}
-                  aria-label={isPassword ? 'Mostrar contraseña' : 'Ocultar contraseña'}
-                >
-                  {true ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              )}
-            </div>
+          {suffixIcon && (
+            <span className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center"
+                  style={{ color: 'var(--warm-gray-3)' }}>
+              {suffixIcon}
+            </span>
           )}
         </div>
+
         {(helperText || error) && (
-          <span
-            id={`${inputId}-help`}
-            className={`text-sm ${error ? 'text-red-500' : 'text-warm-gray-3'}`}
-            style={{ color: error ? 'var(--danger)' : 'var(--warm-gray-3)' }}
-          >
+          <span id={`${inputId}-help`} className="text-small"
+                style={{ color: error ? 'var(--danger)' : 'var(--warm-gray-3)' }}>
             {error || helperText}
           </span>
         )}
@@ -117,38 +82,29 @@ export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 
 const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ({ label, helperText, error, placeholder, options, className = '', id, ...props }, ref) => {
-    const selectId = id || useId();
+    const autoId = useId();
+    const selectId = id || autoId;
 
     return (
       <div className={`flex flex-col gap-1.5 ${className}`}>
-        {label && (
-          <label htmlFor={selectId} className="label">
-            {label}
-          </label>
-        )}
+        {label && <label htmlFor={selectId} className="label">{label}</label>}
         <select
           ref={ref}
           id={selectId}
-          className={`input ${error ? '!border-red-500 !ring-1 !ring-red-500' : ''}`}
+          className="select"
+          style={error ? { borderColor: 'var(--danger)' } : undefined}
           aria-invalid={!!error}
-          aria-describedby={`${selectId}-help`}
+          aria-describedby={helperText || error ? `${selectId}-help` : undefined}
           {...props}
         >
-          {placeholder && (
-            <option value="">{placeholder}</option>
-          )}
-          {options.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
+          {placeholder && <option value="">{placeholder}</option>}
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
         {(helperText || error) && (
-          <span
-            id={`${selectId}-help`}
-            style={{ color: error ? 'var(--danger)' : 'var(--warm-gray-3)' }}
-            className="text-sm"
-          >
+          <span id={`${selectId}-help`} className="text-small"
+                style={{ color: error ? 'var(--danger)' : 'var(--warm-gray-3)' }}>
             {error || helperText}
           </span>
         )}
@@ -169,29 +125,24 @@ export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElemen
 
 const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ label, helperText, error, className = '', id, ...props }, ref) => {
-    const textareaId = id || useId();
+    const autoId = useId();
+    const areaId = id || autoId;
 
     return (
       <div className={`flex flex-col gap-1.5 ${className}`}>
-        {label && (
-          <label htmlFor={textareaId} className="label">
-            {label}
-          </label>
-        )}
+        {label && <label htmlFor={areaId} className="label">{label}</label>}
         <textarea
           ref={ref}
-          id={textareaId}
-          className={`input resize-y ${error ? '!border-red-500 !ring-1 !ring-red-500' : ''}`}
+          id={areaId}
+          className="textarea"
+          style={error ? { borderColor: 'var(--danger)' } : undefined}
           aria-invalid={!!error}
-          aria-describedby={`${textareaId}-help`}
+          aria-describedby={helperText || error ? `${areaId}-help` : undefined}
           {...props}
         />
         {(helperText || error) && (
-          <span
-            id={`${textareaId}-help`}
-            style={{ color: error ? 'var(--danger)' : 'var(--warm-gray-3)' }}
-            className="text-sm"
-          >
+          <span id={`${areaId}-help`} className="text-small"
+                style={{ color: error ? 'var(--danger)' : 'var(--warm-gray-3)' }}>
             {error || helperText}
           </span>
         )}

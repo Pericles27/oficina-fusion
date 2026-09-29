@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+.env.*
+*.log
+.git
+test
+coverage
+pnpm-workspace.yaml
+package-lock.json
+fly.toml

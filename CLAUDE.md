@@ -34,7 +34,7 @@ oficina-fusion/
 - **Frontend**: Next.js 15, React 19, TypeScript, lucide-react, decimal.js, Zod, sonner
 - **Backend**: NestJS 11, Prisma 6, PostgreSQL, passport-jwt, bcryptjs, decimal.js
 - **Decimal convention**: All money as @db.Decimal text, NEVER float
-- **Precision**: 40 decimal places, HALF_UP rounding
+- **Precision**: 30 decimal places, ROUND_HALF_EVEN (banker's rounding)
 
 ## Business Rules
 1. Money saved as canonical decimal text, never float
