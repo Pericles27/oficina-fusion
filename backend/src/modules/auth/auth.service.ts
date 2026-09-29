@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException, BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
+import { Request } from 'express';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { LoginDto, RegisterDto, ChangePasswordDto } from './dtos';
 import { Usuario, RolUsuario, LoginEvent as LoginEventModel } from '@prisma/client';
@@ -18,23 +19,26 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
-  async login(dto: LoginDto): Promise<{ access_token: string; user: Omit<Usuario, 'passwordHash'> }> {
+  async login(dto: LoginDto, req?: Request): Promise<{ access_token: string; user: Omit<Usuario, 'passwordHash'> }> {
+    const ip = req ? (req.headers['x-forwarded-for'] as string) || req.ip : undefined;
+    const userAgent = req ? req.headers['user-agent'] : undefined;
+
     const user = await this.prisma.usuario.findUnique({
       where: { username: dto.username },
     });
 
     if (!user) {
-      await this.logLoginEvent(null, false, dto.username, 'User not found');
+      await this.logLoginEvent(null, false, dto.username, 'User not found', ip, userAgent);
       throw new UnauthorizedException('Invalid credentials');
     }
 
     if (user.bloqueado && user.bloqueadoHasta && user.bloqueadoHasta > new Date()) {
-      await this.logLoginEvent(user.id, false, dto.username, 'Account temporarily blocked');
+      await this.logLoginEvent(user.id, false, dto.username, 'Account temporarily blocked', ip, userAgent);
       throw new ForbiddenException(`Account blocked until ${user.bloqueadoHasta.toISOString()}`);
     }
 
     if (!user.activo) {
-      await this.logLoginEvent(user.id, false, dto.username, 'Account inactive');
+      await this.logLoginEvent(user.id, false, dto.username, 'Account inactive', ip, userAgent);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -57,7 +61,7 @@ export class AuthService {
         },
       });
 
-      await this.logLoginEvent(user.id, false, dto.username, 'Invalid password');
+      await this.logLoginEvent(user.id, false, dto.username, 'Invalid password', ip, userAgent);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -67,7 +71,7 @@ export class AuthService {
       data: { intentosFallidos: 0 },
     });
 
-    await this.logLoginEvent(user.id, true, dto.username);
+    await this.logLoginEvent(user.id, true, dto.username, undefined, ip, userAgent);
 
     const token = this.generateToken(user);
     const { passwordHash, ...safeUser } = user;
@@ -170,12 +174,15 @@ export class AuthService {
     exitoso: boolean,
     username: string,
     motivoFallo?: string,
+    ip?: string,
+    userAgent?: string,
   ): Promise<void> {
-    const headers = { username }; // just for context, ip not available here
     await this.prisma.loginEvent.create({
       data: {
         usuarioId: usuarioId || undefined,
         exitoso,
+        ip: ip || undefined,
+        userAgent: userAgent || undefined,
         motivoFallo: motivoFallo || undefined,
       },
     });
