@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Body, Param, UseGuards, UsePipes } from '@nestjs/common';
+import { Controller, Get, Put, Body, Param, UseGuards } from '@nestjs/common';
 import { QuotationsService } from './quotations.service';
 import { JwtAuthGuard } from '@common/guards/jwt-auth.guard';
 import { RolesGuard } from '@common/guards/roles.guard';
@@ -21,10 +21,23 @@ export class QuotationsController {
     return this.quotationsService.findAll();
   }
 
-  @Put(':par')
+  // El id del par es "BASE/QUOTE" (ej. "USD/ARS"): un único :par no matchea
+  // porque Express no acepta '/' dentro de un segmento de ruta. Se recibe
+  // en dos segmentos y se reconstruye acá.
+  //
+  // Nota: el pipe Zod va en el parámetro @Body, no en @UsePipes de método —
+  // @UsePipes a nivel de método corre el mismo pipe sobre TODOS los
+  // parámetros (incluidos los @Param), y un schema de objeto no puede
+  // parsear un string suelto. Mismo bug preexistente (fuera de este
+  // alcance) en customers.controller.ts:62 (`update`), sin test que lo
+  // cubra hoy — lo reporto en el entregable, no lo toco acá.
+  @Put(':base/:quote')
   @Roles(RolUsuario.ADMIN, RolUsuario.OPERADOR)
-  @UsePipes(new ZodValidationPipe(UpdateQuotationSchema))
-  update(@Param('par') par: string, @Body() dto: UpdateQuotationDto) {
-    return this.quotationsService.update(par, dto);
+  update(
+    @Param('base') base: string,
+    @Param('quote') quote: string,
+    @Body(new ZodValidationPipe(UpdateQuotationSchema)) dto: UpdateQuotationDto,
+  ) {
+    return this.quotationsService.update(`${base}/${quote}`, dto);
   }
 }
