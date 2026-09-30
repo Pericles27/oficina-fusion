@@ -3,7 +3,7 @@
 import { useState, type ComponentType } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, LogOut } from 'lucide-react';
 
 export interface NavEntry {
   label: string;
@@ -18,6 +18,8 @@ export interface AppShellProps {
   brandIcon: ComponentType<{ className?: string }>;
   nav: NavEntry[];
   user: { name: string; role: string; initials: string };
+  /** Opcional: si se pasa, agrega un botón de cerrar sesión junto al usuario. */
+  onLogout?: () => void;
   children: React.ReactNode;
 }
 
@@ -26,7 +28,7 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + '/');
 }
 
-export function AppShell({ brand, brandIcon: BrandIcon, nav, user, children }: AppShellProps) {
+export function AppShell({ brand, brandIcon: BrandIcon, nav, user, onLogout, children }: AppShellProps) {
   const pathname = usePathname();
   const [expanded, setExpanded] = useState(true);
 
@@ -110,7 +112,7 @@ export function AppShell({ brand, brandIcon: BrandIcon, nav, user, children }: A
         <div className={`px-4 py-4 flex items-center gap-3 ${expanded ? '' : 'justify-center'}`}>
           <span className="avatar avatar-md">{user.initials}</span>
           {expanded && (
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-[13.5px] font-medium truncate m-0"
                  style={{ color: 'var(--warm-gray-1)' }}>
                 {user.name}
@@ -119,6 +121,11 @@ export function AppShell({ brand, brandIcon: BrandIcon, nav, user, children }: A
                 {user.role}
               </p>
             </div>
+          )}
+          {onLogout && expanded && (
+            <button onClick={onLogout} className="btn btn-icon" aria-label="Cerrar sesión" title="Cerrar sesión">
+              <LogOut className="w-4 h-4" />
+            </button>
           )}
         </div>
       </aside>

@@ -26,31 +26,78 @@ describe('Auth E2E', () => {
   });
 
   describe('POST /auth/register', () => {
-    it('crea un usuario nuevo y retorna access_token + user sin passwordHash', async () => {
+    // El alta de usuarios es una operación privilegiada: sólo un ADMIN
+    // autenticado puede crear cuentas. Sin esta restricción, cualquiera con la
+    // URL pública podía crearse un usuario con roles arbitrarios (incluido
+    // ADMIN) enviándolos en el body — escalada de privilegios.
+    async function adminToken(): Promise<string> {
+      const admin = await createTestUser({
+        username: 'admin.register',
+        roles: [RolUsuario.ADMIN],
+      });
+      const res = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ username: admin.username, password: admin.password })
+        .expect(200);
+      return res.body.access_token as string;
+    }
+
+    it('rechaza el alta sin token (401)', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({ username: 'anonimo', password: 'Passw0rd!', nombre: 'Anonimo' })
+        .expect(401);
+    });
+
+    it('rechaza el alta con token de rol no-ADMIN (403)', async () => {
+      const cadete = await createTestUser({
+        username: 'cadete.register',
+        roles: [RolUsuario.CADETE],
+      });
+      const login = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ username: cadete.username, password: cadete.password })
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .set('Authorization', `Bearer ${login.body.access_token}`)
+        .send({ username: 'colado', password: 'Passw0rd!', nombre: 'Colado' })
+        .expect(403);
+    });
+
+    it('un ADMIN crea un usuario nuevo y recibe user sin passwordHash', async () => {
+      const token = await adminToken();
+
       const res = await request(app.getHttpServer())
         .post('/auth/register')
+        .set('Authorization', `Bearer ${token}`)
         .send({ username: 'nuevo.usuario', password: 'Passw0rd!', nombre: 'Nuevo Usuario' })
         .expect(201);
 
-      expect(res.body.access_token).toEqual(expect.any(String));
       expect(res.body.user.username).toBe('nuevo.usuario');
       expect(res.body.user).not.toHaveProperty('passwordHash');
-      // Rol por defecto: CADETE
+      // Rol por defecto: CADETE (el menos privilegiado)
       expect(res.body.user.roles).toEqual([RolUsuario.CADETE]);
     });
 
     it('rechaza el registro con username duplicado (409)', async () => {
+      const token = await adminToken();
       await createTestUser({ username: 'repetido' });
 
       await request(app.getHttpServer())
         .post('/auth/register')
+        .set('Authorization', `Bearer ${token}`)
         .send({ username: 'repetido', password: 'Passw0rd!', nombre: 'Otro' })
         .expect(409);
     });
 
     it('rechaza el registro con body inválido (400, DTO class-validator)', async () => {
+      const token = await adminToken();
+
       await request(app.getHttpServer())
         .post('/auth/register')
+        .set('Authorization', `Bearer ${token}`)
         .send({ username: '', password: '123', nombre: '' })
         .expect(400);
     });

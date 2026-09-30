@@ -13,6 +13,9 @@ import {
 import { Request } from 'express';
 import { OperationsService } from './operations.service';
 import { JwtAuthGuard } from '@common/guards/jwt-auth.guard';
+import { RolesGuard } from '@common/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RolUsuario } from '@prisma/client';
 import { ZodValidationPipe } from '@common/pipes/zod-validation.pipe';
 import {
   CreateOpSchema,
@@ -23,7 +26,12 @@ import {
   OpFilterDto,
 } from './dto/operations.dto';
 
-@UseGuards(JwtAuthGuard)
+// F2: `operations` estaba sólo en `auth` (cualquier rol autenticado), lo que
+// permitía a un CADETE crear/ver/finalizar operaciones. Se cierra a
+// ADMIN/OPERADOR a nivel de controller: no hay ningún endpoint de operaciones
+// que un cadete deba poder tocar.
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(RolUsuario.ADMIN, RolUsuario.OPERADOR)
 @Controller('operations')
 export class OperationsController {
   constructor(private operationsService: OperationsService) {}

@@ -98,6 +98,7 @@ enum ClienteSaldoTipo {
 
 enum RolUsuario {
   ADMIN
+  OPERADOR
   CADETE
 }
 

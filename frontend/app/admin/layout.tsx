@@ -1,7 +1,10 @@
 'use client';
 
 import { LayoutDashboard, ArrowRightLeft, Users, FileText, DollarSign } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { AppShell, type NavEntry } from '@/components/AppShell';
+import { RouteGuard } from '@/components/RouteGuard';
+import { useAuth } from '@/lib/auth-context';
 
 const nav: NavEntry[] = [
   { label: 'Dashboard', short: 'Inicio', href: '/admin', icon: LayoutDashboard },
@@ -11,15 +14,39 @@ const nav: NavEntry[] = [
   { label: 'Cotizaciones', short: 'Tasas', href: '/admin/quotation', icon: DollarSign },
 ];
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+function AdminShell({ children }: { children: React.ReactNode }) {
+  const { user, logout } = useAuth();
+  const router = useRouter();
+
+  // user no puede ser null acá: RouteGuard ya garantizó sesión antes de
+  // renderizar los children.
+  const nombre = user?.nombre ?? '';
+  const rol = user?.roles.includes('ADMIN') ? 'Administrador' : 'Operador';
+  const initials =
+    nombre
+      .split(' ')
+      .map((p) => p[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase() || '··';
+
   return (
     <AppShell
       brand="Oficina"
       brandIcon={LayoutDashboard}
       nav={nav}
-      user={{ name: 'Nicolás García', role: 'Administrador', initials: 'NG' }}
+      user={{ name: nombre, role: rol, initials }}
+      onLogout={() => logout().then(() => router.replace('/login'))}
     >
       {children}
     </AppShell>
+  );
+}
+
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <RouteGuard allow={['ADMIN', 'OPERADOR']}>
+      <AdminShell>{children}</AdminShell>
+    </RouteGuard>
   );
 }

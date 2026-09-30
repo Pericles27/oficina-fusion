@@ -9,7 +9,7 @@ import { getJwtSecret } from '@common/config/jwt-secret';
   imports: [
     JwtModule.register({
       secret: getJwtSecret(),
-      signOptions: { expiresIn: '7d' },
+      signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || '7d' },
     } as any),
   ],
   controllers: [UsersController],

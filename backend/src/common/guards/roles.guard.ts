@@ -11,7 +11,14 @@ export class RolesGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const requiredRoles = this.reflector.get<RolUsuario[]>('roles', context.getHandler());
+    // getAllAndOverride: si el handler (método) tiene su propio @Roles,
+    // ese gana; si no, cae al @Roles de la clase. Sin esto, un @Roles()
+    // puesto sólo en la clase (como ClosingController u OperationsController)
+    // queda sin efecto: Reflector.get() lee metadata sólo del handler.
+    const requiredRoles = this.reflector.getAllAndOverride<RolUsuario[]>('roles', [
+      context.getHandler(),
+      context.getClass(),
+    ]);
     if (!requiredRoles || requiredRoles.length === 0) return true;
 
     const request = context.switchToHttp().getRequest();

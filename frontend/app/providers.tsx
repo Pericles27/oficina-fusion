@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { CajaProvider } from '@/lib/caja-store';
+import { AuthProvider } from '@/lib/auth-context';
+import { getStoredTheme, setStoredTheme } from '@/lib/theme-storage';
 import { Toaster } from '@/components/ui';
 
 type Theme = 'light' | 'dark';
@@ -26,7 +28,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   // Hidratación: leer preferencia guardada o la del sistema
   useEffect(() => {
-    const stored = localStorage.getItem('of-theme') as Theme | null;
+    const stored = getStoredTheme();
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     setThemeState(stored ?? (prefersDark ? 'dark' : 'light'));
     setMounted(true);
@@ -36,7 +38,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!mounted) return;
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem('of-theme', theme);
+    setStoredTheme(theme);
   }, [theme, mounted]);
 
   const setTheme = (t: Theme) => setThemeState(t);
@@ -44,12 +46,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
-      <CajaProvider>
-        <div className="app-root">
-          {children}
-          <Toaster />
-        </div>
-      </CajaProvider>
+      <AuthProvider>
+        <CajaProvider>
+          <div className="app-root">
+            {children}
+            <Toaster />
+          </div>
+        </CajaProvider>
+      </AuthProvider>
     </ThemeContext.Provider>
   );
 }
