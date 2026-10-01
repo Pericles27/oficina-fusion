@@ -5,7 +5,6 @@ import {
   Post,
   Body,
   Param,
-  Query,
   UseGuards,
   UseFilters,
   UsePipes,
@@ -35,7 +34,7 @@ export class UsersController {
 
   @Get(':id')
   @Roles(RolUsuario.ADMIN)
-  async findById(@Query('id') id: string) {
+  async findById(@Param('id') id: string) {
     return this.usersService.findById(id);
   }
 
