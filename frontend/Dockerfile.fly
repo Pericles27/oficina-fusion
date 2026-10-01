@@ -1,0 +1,31 @@
+# =============================================================
+# Oficina Fusion — Frontend (Next.js static) served as is
+# =============================================================
+
+FROM node:20-alpine AS base
+WORKDIR /app
+RUN npm install -g serve
+
+# Copy all source (needed for prisma schema)
+COPY . .
+
+# Copy prisma schema from backend
+COPY ../backend/prisma ./prisma
+
+# Generate prisma client (needed by frontend)
+ARG DATABASE_URL
+RUN DATABASE_URL="${DATABASE_URL:-file:./prisma/dev.db}" npx prisma generate
+
+# Build Next.js (will create .next and out/)
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+RUN npx next build
+
+# Serve the static export
+USER node
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000/',res=>process.exit(res.statusCode<500?0:1)).on('error',()=>process.exit(1))"
+
+CMD ["serve", "-l", "3000"]
