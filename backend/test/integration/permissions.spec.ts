@@ -248,6 +248,60 @@ describe('F2 — matriz de permisos por rol', () => {
         .set('Authorization', `Bearer ${token}`)
         .expect(403);
     });
+
+    it('F4: ciclo completo — crear (register) -> cambiar rol (PATCH) -> desactivar -> 401 al reintentar', async () => {
+      const adminToken = await loginAs('admin.ciclo', [RolUsuario.ADMIN]);
+
+      // 1. Crear usuario (POST /auth/register, CADETE inicial)
+      const registerRes = await request(app.getHttpServer())
+        .post('/auth/register')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          username: 'ciclo.usuario',
+          password: 'password123',
+          nombre: 'Usuario Ciclo',
+          roles: [RolUsuario.CADETE],
+        })
+        .expect(201);
+
+      const userId = registerRes.body.id ?? registerRes.body.user?.id;
+      expect(userId).toEqual(expect.any(String));
+
+      // El usuario recién creado puede loguearse con CADETE
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ username: 'ciclo.usuario', password: 'password123' })
+        .expect(200);
+
+      // 2. Cambiar rol a OPERADOR (PATCH /users/:id)
+      const patchRes = await request(app.getHttpServer())
+        .patch(`/users/${userId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ roles: [RolUsuario.OPERADOR] })
+        .expect(200);
+
+      expect(patchRes.body.roles).toEqual([RolUsuario.OPERADOR]);
+
+      // El rol nuevo se refleja en el próximo login (JWT firmado de nuevo)
+      const loginTrasRol = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ username: 'ciclo.usuario', password: 'password123' })
+        .expect(200);
+      expect(loginTrasRol.body.user.roles).toEqual([RolUsuario.OPERADOR]);
+
+      // 3. Desactivar (PATCH /users/:id {activo: false})
+      await request(app.getHttpServer())
+        .patch(`/users/${userId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ activo: false })
+        .expect(200);
+
+      // 4. 401 al reintentar login
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ username: 'ciclo.usuario', password: 'password123' })
+        .expect(401);
+    });
   });
 
   describe('GET /auth/me devuelve primerLogin', () => {
