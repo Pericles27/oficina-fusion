@@ -46,7 +46,11 @@ export class OperationsService {
         notas: dto.notas ?? undefined,
         operadorId,
       },
-      include: { par: true, cliente: true },
+      include: {
+        par: true,
+        cliente: true,
+        operador: { select: { id: true, nombre: true } },
+      },
     });
   }
 
@@ -69,7 +73,16 @@ export class OperationsService {
         skip: (filter.page - 1) * filter.pageSize,
         take: filter.pageSize,
         orderBy: { ts: 'desc' },
-        include: { par: true, cliente: true },
+        include: {
+          par: true,
+          cliente: true,
+          // R5 (ANALISIS-FASES-3-4-5.md): GET /users es ADMIN-only, un
+          // OPERADOR no puede listar traders. En vez de abrir ese
+          // endpoint, el nombre del operador viaja en la propia
+          // operación — select limitado, no se expone el usuario entero
+          // (username, passwordHash, etc. quedan afuera).
+          operador: { select: { id: true, nombre: true } },
+        },
       }),
       this.prisma.operacion.count({ where }),
     ]);
@@ -80,7 +93,12 @@ export class OperationsService {
   async findOne(id: string): Promise<Operacion> {
     const op = await this.prisma.operacion.findUnique({
       where: { id },
-      include: { par: true, cliente: true, comision: true },
+      include: {
+        par: true,
+        cliente: true,
+        comision: true,
+        operador: { select: { id: true, nombre: true } },
+      },
     });
     if (!op) throw new NotFoundException(`Operación ${id} no encontrada`);
     return op;
@@ -109,7 +127,11 @@ export class OperationsService {
     return this.prisma.operacion.update({
       where: { id },
       data,
-      include: { par: true, cliente: true },
+      include: {
+        par: true,
+        cliente: true,
+        operador: { select: { id: true, nombre: true } },
+      },
     });
   }
 
