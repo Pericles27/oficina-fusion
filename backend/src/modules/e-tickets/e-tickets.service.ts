@@ -3,6 +3,41 @@ import { PrismaService } from '@common/prisma/prisma.service';
 import { CreateEticketDto, UpdateEticketDto } from './dto/eticket.dto';
 import { Eticket, EticketEstado, Prisma } from '@prisma/client';
 
+/**
+ * Lista blanca de campos que un CADETE puede ver. `select` explícito:
+ * si mañana se agrega un campo sensible al modelo (ej. `comisionUsd`),
+ * NO aparece acá automáticamente — hay que agregarlo a mano. Es la
+ * diferencia entre lista blanca y lista negra (ver ANALISIS-FASES-3-4-5.md
+ * §1 sobre el riesgo de usar destructuring para "sacar" campos).
+ *
+ * DECISIÓN PENDIENTE (ver ANALISIS-FASES-3-4-5.md §2, pregunta a Nicolás):
+ * ¿el cadete ve el monto que tiene que entregar/recibir? El schema sugiere
+ * que sí (es instrucción operativa, no "dato de negocio"), pero el código
+ * anterior lo ocultaba. Mientras no haya respuesta, se mantiene el
+ * comportamiento MÁS CONSERVADOR recomendado por el análisis: NO se
+ * exponen montoEntregar/montoRecibir/monedaEntregar/monedaRecibir al
+ * cadete. Para revertir esto hay que cambiar sólo esta constante.
+ */
+const ETICKET_CADETE_SELECT = {
+  id: true,
+  numero: true,
+  codigo: true,
+  ts: true,
+  estado: true,
+  clienteId: true,
+  metodoEntrega: true,
+  direccionEntrega: true,
+  telefonoContacto: true,
+  nombreRecibe: true,
+  horarioEntrega: true,
+  banco: true,
+  cuentaDeposito: true,
+  instrucciones: true,
+  confirmadoPor: true,
+  confirmadoEn: true,
+  creadoEn: true,
+} as const;
+
 @Injectable()
 export class ETicketsService {
   constructor(private prisma: PrismaService) {}
@@ -50,10 +85,35 @@ export class ETicketsService {
     });
   }
 
-  async findAll(params: { estado?: string; clienteId?: string; page?: number; pageSize?: number }) {
+  async findAll(params: {
+    estado?: string;
+    clienteId?: string;
+    page?: number;
+    pageSize?: number;
+    scopeCadete?: boolean;
+  }) {
     const page = params.page ?? 1;
     const pageSize = params.pageSize ?? 20;
     const where: Prisma.EticketWhereInput = {};
+
+    if (params.scopeCadete) {
+      // F5 (R1): un cadete SOLO ve e-tickets pendientes y NUNCA campos
+      // económicos. Ignora el filtro de `estado` que venga del cliente —
+      // el scope es fijo para este rol, no negociable por query param.
+      where.estado = 'pendiente';
+      const [data, total] = await Promise.all([
+        this.prisma.eticket.findMany({
+          where,
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+          orderBy: { ts: 'desc' },
+          select: ETICKET_CADETE_SELECT,
+        }),
+        this.prisma.eticket.count({ where }),
+      ]);
+      return { data, total, page, pageSize };
+    }
+
     if (params.estado) where.estado = params.estado as EticketEstado;
     if (params.clienteId) where.clienteId = params.clienteId;
 
@@ -76,11 +136,19 @@ export class ETicketsService {
     return et;
   }
 
-  /** Vista para el cadete: NUNCA incluye datos económicos (montoEntregar/montoRecibir) */
+  /**
+   * Vista para el cadete: NUNCA incluye datos económicos (montoEntregar/
+   * montoRecibir/monedas). `select` explícito, no destructuring — con
+   * destructuring, un campo nuevo en el modelo aparece en la respuesta
+   * automáticamente y el código compila igual (fuga silenciosa).
+   */
   async findOneForCadete(id: string) {
-    const et = await this.findOne(id);
-    const { montoEntregar, montoRecibir, monedaEntregar, monedaRecibir, ...safe } = et;
-    return safe;
+    const et = await this.prisma.eticket.findUnique({
+      where: { id },
+      select: ETICKET_CADETE_SELECT,
+    });
+    if (!et) throw new NotFoundException(`E-Ticket ${id} no encontrado`);
+    return et;
   }
 
   async update(id: string, dto: UpdateEticketDto): Promise<Eticket> {

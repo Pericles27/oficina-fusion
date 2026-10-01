@@ -38,18 +38,30 @@ export class ETicketsController {
     return this.eTicketsService.create(dto, req.user.id);
   }
 
+  // F5: el alcance de lo que ve un CADETE se deriva del TOKEN, nunca de un
+  // query param — un cadeteId que viniera del cliente permitiría a
+  // cualquier cadete ver los e-tickets de otro con sólo cambiar el query.
+  // Alcance mínimo (sin migración, decisión documentada en
+  // ANALISIS-FASES-3-4-5.md §2 opción C, pendiente de confirmar con
+  // Nicolás): el cadete ve TODOS los pendientes (bolsa común), no sólo los
+  // suyos — no existe campo `asignadoA` en el modelo Eticket todavía.
   @Get()
   findAll(
+    @Req() req: Request & { user: { id: string; roles: RolUsuario[] } },
     @Query('estado') estado?: string,
     @Query('clienteId') clienteId?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
   ) {
+    const esCadete =
+      req.user.roles.includes(RolUsuario.CADETE) && !req.user.roles.includes(RolUsuario.ADMIN);
+
     return this.eTicketsService.findAll({
       estado,
       clienteId,
       page: page ? Number(page) : undefined,
       pageSize: pageSize ? Number(pageSize) : undefined,
+      scopeCadete: esCadete,
     });
   }
 
