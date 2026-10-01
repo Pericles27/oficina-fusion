@@ -26,19 +26,20 @@ import {
    Helpers de formato
    ============================================================= */
 
-const fmt = (n: number, digits = 0) =>
-  n.toLocaleString('es-AR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+const fmt = (n: number | string, digits = 0) =>
+  Number(n).toLocaleString('es-AR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
 /** Notación compacta para mobile: 157.200.000 → 157,2M */
-const fmtCompact = (n: number) => {
-  const abs = Math.abs(n);
-  if (abs >= 1_000_000) return `${(n / 1_000_000).toLocaleString('es-AR', { maximumFractionDigits: 1 })}M`;
-  if (abs >= 10_000) return `${(n / 1_000).toLocaleString('es-AR', { maximumFractionDigits: 0 })}K`;
-  return fmt(n);
+const fmtCompact = (n: number | string) => {
+  const num = Number(n);
+  const abs = Math.abs(num);
+  if (abs >= 1_000_000) return `${(num / 1_000_000).toLocaleString('es-AR', { maximumFractionDigits: 1 })}M`;
+  if (abs >= 10_000) return `${(num / 1_000).toLocaleString('es-AR', { maximumFractionDigits: 0 })}K`;
+  return fmt(num);
 };
 
 /** Total: completo en desktop, compacto en mobile */
-function Total({ value, digits }: { value: number; digits: number }) {
+function Total({ value, digits }: { value: number | string; digits: number }) {
   return (
     <>
       <span className="hidden sm:inline">{fmt(value, digits)}</span>
@@ -87,7 +88,7 @@ function OpRow({ o, parDef, onOpen, isOpen }: {
     setDraft(
       field === 'cliente' ? o.cliente
       : field === 'monto' ? String(o.monto)
-      : o.cotiz.toFixed(parDef.decimals)
+      : Number(o.cotiz).toFixed(parDef.decimals)
     );
   };
 
@@ -227,7 +228,13 @@ function BlotterTable({
   }, [bindFocus]);
 
   const montoNum = parseFloat(monto.replace(',', '.')) || 0;
-  const cotizNum = parseFloat(cotiz.replace(',', '.')) || (isBuy ? parDef.compra : parDef.venta);
+  const cotizNum = parseFloat(cotiz.replace(',', '.')) || Number(isBuy ? parDef.compra : parDef.venta);
+  // Preview visual, sólo mientras el usuario escribe y ANTES de confirmar
+  // — no hay operación creada todavía, nada que reconciliar contra la
+  // API. En cuanto se confirma, el backend recalcula `contra` con
+  // Decimal (operations.service.ts) y ese es el valor que persiste; este
+  // `total` nunca se guarda ni se usa para nada más que mostrar un
+  // numerito mientras se tipea.
   const total = montoNum * cotizNum;
 
   const commit = useCallback(() => {
@@ -310,7 +317,7 @@ function BlotterTable({
               </td>
               <td className="num">
                 <input className="input-inline"
-                       placeholder={(isBuy ? parDef.compra : parDef.venta).toFixed(parDef.decimals)}
+                       placeholder={Number(isBuy ? parDef.compra : parDef.venta).toFixed(parDef.decimals)}
                        value={cotiz} inputMode="decimal"
                        onChange={(e) => setCotiz(e.target.value)} style={{ textAlign: 'right' }} />
               </td>

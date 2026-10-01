@@ -19,14 +19,15 @@ import {
   type Par,
 } from '@/lib/caja-store';
 
-const fmt = (n: number, digits = 0) =>
-  n.toLocaleString('es-AR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+const fmt = (n: number | string, digits = 0) =>
+  Number(n).toLocaleString('es-AR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
-const fmtCompact = (n: number) => {
-  const abs = Math.abs(n);
-  if (abs >= 1_000_000) return `${(n / 1_000_000).toLocaleString('es-AR', { maximumFractionDigits: 1 })}M`;
-  if (abs >= 10_000) return `${(n / 1_000).toLocaleString('es-AR', { maximumFractionDigits: 0 })}K`;
-  return fmt(n);
+const fmtCompact = (n: number | string) => {
+  const num = Number(n);
+  const abs = Math.abs(num);
+  if (abs >= 1_000_000) return `${(num / 1_000_000).toLocaleString('es-AR', { maximumFractionDigits: 1 })}M`;
+  if (abs >= 10_000) return `${(num / 1_000).toLocaleString('es-AR', { maximumFractionDigits: 0 })}K`;
+  return fmt(num);
 };
 
 const digitsFor = (moneda: string) => (moneda === 'ARS' ? 0 : 2);
@@ -222,7 +223,7 @@ export function ETicketPanel({
    ============================================================= */
 
 function FlujoLado({ dir, moneda, monto }: {
-  dir: 'entregamos' | 'recibimos'; moneda: string; monto: number;
+  dir: 'entregamos' | 'recibimos'; moneda: string; monto: number | string;
 }) {
   const sale = dir === 'entregamos';
   const Icon = sale ? ArrowUpRight : ArrowDownLeft;

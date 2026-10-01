@@ -11,8 +11,8 @@ import {
   type Operation,
 } from '@/lib/caja-store';
 
-const fmt = (n: number, digits = 0) =>
-  n.toLocaleString('es-AR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+const fmt = (n: number | string, digits = 0) =>
+  Number(n).toLocaleString('es-AR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
 const statusClass: Record<Operation['status'], string> = {
   finalizada: 'badge-success',

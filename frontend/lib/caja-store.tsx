@@ -4,10 +4,13 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
+import { api, ApiError } from './api';
 
 /* =============================================================
    Tipos
@@ -17,13 +20,27 @@ export type Tipo = 'C' | 'V';
 export type CoberturaTipo = 'efectivo' | 'saldo';
 export type OpStatus = 'pendiente' | 'ejecucion' | 'finalizada';
 
+/** Mapeo de estados: backend usa 'en_ejecucion'/'cancelada', la UI usa 'ejecucion' sin 'cancelada' visible (cancelada se filtra fuera del blotter). */
+const STATUS_FROM_API: Record<string, OpStatus> = {
+  pendiente: 'pendiente',
+  en_ejecucion: 'ejecucion',
+  finalizada: 'finalizada',
+  cancelada: 'pendiente', // no debería listarse igual, ver filtrado en fetch
+};
+const STATUS_TO_API: Record<OpStatus, string> = {
+  pendiente: 'pendiente',
+  ejecucion: 'en_ejecucion',
+  finalizada: 'finalizada',
+};
+
 export interface Par {
   par: string;
   base: string;
   quote: string;
   nombre: string;
-  compra: number;
-  venta: number;
+  /** F3: todos los montos viajan como string decimal canónico — cero floats. */
+  compra: string;
+  venta: string;
   decimals: number;
 }
 
@@ -57,14 +74,27 @@ export interface CuentaBancaria {
 /* =============================================================
    E-TICKET — modelo por tipo de operación
    -------------------------------------------------------------
-   Toda operación tiene DOS patas (schema: Eticket.montoEntregar /
-   montoRecibir):
+   LIMITACIÓN CONOCIDA (reportada en el entregable de Fase 3):
+   el backend modela el e-ticket como una entidad PLANA (`Eticket`):
+   un método de entrega, un monto a entregar y uno a recibir. El
+   modelo de UI de abajo (dos "patas" con comprobante en dataURL,
+   estado propio por tramo, método por tramo) no tiene un endpoint
+   equivalente — no existe `POST /e-tickets/:id/patas` ni nada que
+   reciba un dataURL de comprobante.
 
-     Compra (C): la caja RECIBE base  y ENTREGA quote
-     Venta  (V): la caja ENTREGA base y RECIBE  quote
+   Decisión tomada (bajo nivel, documentada para auditoría): las
+   PATAS siguen viviendo en memoria local del store, derivadas de
+   `Operation` al crearse (igual que antes), y las acciones que las
+   tocan (EDIT_PATA, SET_COMPROBANTE, CONFIRMAR_PATA,
+   SET_INSTRUCCIONES) actualizan sólo el estado local — NO llaman a
+   la API todavía. Esto significa que el detalle del e-ticket (quién
+   recibe, comprobante subido, etc.) NO sobrevive un F5 hoy. Persiste
+   sí: la operación en sí (monto, cotización, estado, cliente).
 
-   Cada pata se liquida por un método distinto, y cada método
-   pide datos distintos. De ahí que la carga dependa del tipo.
+   Para completar esto hace falta definir el contrato
+   POST/PUT /e-tickets con la forma de "dos tramos" — eso es una
+   decisión de modelo de datos que no me corresponde inventar en
+   silencio (igual que B2 del análisis del Arquitecto). Reportado.
    ============================================================= */
 
 export type Direccion = 'entregamos' | 'recibimos';
@@ -98,7 +128,8 @@ export interface Pata {
   id: string;
   direccion: Direccion;
   moneda: string;
-  monto: number;
+  /** F3: string decimal canónico. */
+  monto: string;
   metodo: MetodoPata;
 
   // efectivo en mano
@@ -118,7 +149,7 @@ export interface Pata {
 }
 
 /** Qué entrega y qué recibe la caja, según el tipo de operación. */
-export function patasDe(o: { tipo: Tipo; monto: number; contra: number }, par: Par) {
+export function patasDe(o: { tipo: Tipo; monto: string; contra: string }, par: Par) {
   return o.tipo === 'C'
     ? {
         recibimos: { moneda: par.base, monto: o.monto },
@@ -138,13 +169,13 @@ function metodoSugerido(moneda: string, cobertura: CoberturaTipo): MetodoPata {
 
 /** Crea las dos patas iniciales de una operación. */
 export function crearPatas(
-  o: { tipo: Tipo; monto: number; contra: number; cobertura: CoberturaTipo },
+  o: { tipo: Tipo; monto: string; contra: string; cobertura: CoberturaTipo },
   par: Par,
   cuenta?: CuentaBancaria
 ): Pata[] {
   const p = patasDe(o, par);
 
-  const build = (direccion: Direccion, moneda: string, monto: number): Pata => {
+  const build = (direccion: Direccion, moneda: string, monto: string): Pata => {
     const metodo = metodoSugerido(moneda, o.cobertura);
     return {
       id: `${direccion}-${Math.random().toString(36).slice(2, 9)}`,
@@ -174,19 +205,44 @@ export interface Operation {
   hora: string;
   tipo: Tipo;
   par: string;
-  monto: number;
-  cotiz: number;
-  contra: number;
+  /** F3: campos monetarios como string decimal canónico — nunca número. */
+  monto: string;
+  cotiz: string;
+  contra: string;
   cobertura: CoberturaTipo;
   status: OpStatus;
   operadorId: string;
   clienteId: string | null;
   cliente: string;
   notas: string | null;
-  /** Las dos patas del e-ticket (entregamos / recibimos) */
+  /** Las dos patas del e-ticket (entregamos / recibimos) — ver nota arriba: viven sólo en memoria local. */
   patas: Pata[];
-  /** Instrucciones generales para el cadete */
+  /** Instrucciones generales para el cadete — también sólo en memoria local por ahora. */
   instrucciones: string;
+}
+
+/** KPI de un par, tal como lo devuelve GET /operations/kpis/par (aggregateByPar). */
+export interface KpiPar {
+  par: string;
+  totalCompras: number;
+  totalVentas: number;
+  compraPromedio: number;
+  ventaPromedio: number;
+  spreadPromedio: number;
+  volumenTotalUsd: number;
+  nOps: number;
+  gananciaEstimadaUsd: number;
+}
+
+export interface KpiOperador {
+  operadorId: string;
+  operadorNombre: string;
+  nOps: number;
+  totalCompras: number;
+  totalVentas: number;
+  volumenTotalUsd: number;
+  gananciaUsd: number;
+  comisionesUsd: number;
 }
 
 interface CajaState {
@@ -196,6 +252,9 @@ interface CajaState {
   pares: Par[];
   traders: Trader[];
   lastOperadorId: string;
+  /** F3: KPIs calculados por el backend — cero aritmética financiera en el cliente. */
+  kpisPar: KpiPar[];
+  kpisOperador: KpiOperador[];
 }
 
 export const OP_STATUS_LABEL: Record<OpStatus, string> = {
@@ -206,123 +265,155 @@ export const OP_STATUS_LABEL: Record<OpStatus, string> = {
 
 const STATUS_CYCLE: OpStatus[] = ['pendiente', 'ejecucion', 'finalizada'];
 
-/* =============================================================
-   Estado inicial
-   ============================================================= */
+const EMPTY_STATE: CajaState = {
+  diaAbierto: true,
+  operaciones: [],
+  clientes: [],
+  pares: [],
+  traders: [],
+  lastOperadorId: '',
+  kpisPar: [],
+  kpisOperador: [],
+};
 
-const PARES: Par[] = [
-  { par: 'USD/ARS', base: 'USD', quote: 'ARS', nombre: 'Dólar', compra: 1048, venta: 1052, decimals: 2 },
-  { par: 'EUR/ARS', base: 'EUR', quote: 'ARS', nombre: 'Euro', compra: 1138, venta: 1144, decimals: 2 },
-  { par: 'USD/BRL', base: 'USD', quote: 'BRL', nombre: 'Dólar/Real', compra: 5.0, venta: 5.2, decimals: 2 },
-];
-
-const TRADERS: Trader[] = [
-  { id: 't1', name: 'Nicolás García', initials: 'NG', alias: 'Nico', desk: 'Mesa 1', active: true, favorite: true },
-  { id: 't2', name: 'María López', initials: 'ML', alias: 'Mari', desk: 'Mesa 1', active: true },
-  { id: 't3', name: 'Carlos Pérez', initials: 'CP', desk: 'Mesa 2', active: true },
-];
-
-const CLIENTES: Cliente[] = [
-  { id: 'c1', nombre: 'Carlos Méndez', doc: '30.456.789', cuentas: [
-    { id: 'cu1', banco: 'Galicia', alias: 'carlos.mendez.gal', cbu: '0070999530004512345678', moneda: 'ARS' },
-    { id: 'cu2', banco: 'Santander', alias: 'cmendez.san', cbu: '0720123488000012345678', moneda: 'ARS' },
-  ] },
-  { id: 'c2', nombre: 'Ana Rodríguez', doc: '28.123.456', cuentas: [
-    { id: 'cu3', banco: 'BBVA', alias: 'ana.rodriguez', cbu: '0170099220000067890123', moneda: 'ARS' },
-  ] },
-  { id: 'c3', nombre: 'Miguel Torres', doc: '32.789.012', cuentas: [
-    { id: 'cu4', banco: 'Macro', alias: 'mtorres.macro', cbu: '2850590940090418135201', moneda: 'ARS' },
-    { id: 'cu5', banco: 'Brubank', alias: 'miguel.torres.bru', cbu: '1430001713008123456789', moneda: 'ARS' },
-  ] },
-  { id: 'c4', nombre: 'Laura Sánchez', doc: '27.654.321', cuentas: [
-    { id: 'cu6', banco: 'Nación', alias: 'laura.sanchez.bna', cbu: '0110599520000012345678', moneda: 'ARS' },
-  ] },
-];
-
-function hhmm(d = new Date()) {
-  return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+function hhmm(iso: string) {
+  return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
 }
 
-/** Operaciones de ejemplo para que la planilla no arranque vacía. */
-function seedOps(): Operation[] {
-  const base: Array<[Tipo, string, number, number, string, string, CoberturaTipo, OpStatus, string]> = [
-    ['C', 'USD/ARS', 150000, 1048, 'Carlos Méndez', 'c1', 'efectivo', 'finalizada', '10:32'],
-    ['C', 'USD/ARS', 500000, 1049, 'Miguel Torres', 'c3', 'saldo', 'finalizada', '11:48'],
-    ['V', 'USD/ARS', 250000, 1052, 'Ana Rodríguez', 'c2', 'efectivo', 'ejecucion', '11:15'],
-    ['V', 'USD/ARS', 80000, 1051, 'Laura Sánchez', 'c4', 'efectivo', 'finalizada', '12:02'],
-    ['C', 'EUR/ARS', 40000, 1138, 'Ana Rodríguez', 'c2', 'efectivo', 'pendiente', '12:30'],
-  ];
+function mensajeDe(e: unknown): string {
+  if (e instanceof ApiError) return e.message;
+  return 'Error de red';
+}
 
-  return base.map(([tipo, par, monto, cotiz, cliente, clienteId, cobertura, status, hora], i) => {
-    const contra = monto * cotiz;
-    const cli = CLIENTES.find((c) => c.id === clienteId);
-    const parDef = PARES.find((p) => p.par === par) ?? PARES[0];
+/* =============================================================
+   Mapeo API → modelo de UI
+   ============================================================= */
 
-    // Las patas se derivan del tipo de operación
-    const patas = crearPatas(
-      { tipo, monto, contra, cobertura },
-      parDef,
-      cli?.cuentas?.[0]
-    ).map((p) => {
-      // Completamos los ejemplos para mostrar el flujo en distintos estados
-      if (i === 0 && p.metodo === 'deposito') {
-        return {
-          ...p,
-          nota: 'Depositar antes de las 14:00',
-          estado: 'confirmado' as const,
-          comprobante: { nombre: 'transferencia-galicia.jpg', dataUrl: '', subidoEl: '10:58' },
-        };
-      }
-      if (i === 0 && p.metodo === 'efectivo') {
-        return {
-          ...p,
-          direccionEntrega: 'Av. Córdoba 1234, piso 8',
-          nombreRecibe: 'Carlos Méndez',
-          telefono: '11 5544-3322',
-          horario: '13:00 a 15:00',
-          estado: 'confirmado' as const,
-        };
-      }
-      if (i === 2 && p.metodo === 'deposito') {
-        return {
-          ...p,
-          nota: 'Cliente espera confirmación por WhatsApp',
-          estado: 'hecho' as const,
-          comprobante: { nombre: 'comprobante-bbva.pdf', dataUrl: '', subidoEl: '11:40' },
-        };
-      }
-      if (i === 2 && p.metodo === 'efectivo') {
-        return {
-          ...p,
-          direccionEntrega: 'Tucumán 540, oficina 3',
-          nombreRecibe: 'Ana Rodríguez',
-          telefono: '11 4433-2211',
-          horario: 'a partir de las 16:00',
-        };
-      }
-      return p;
-    });
+/** Shape mínimo que necesitamos de la Operacion que devuelve el backend. */
+interface ApiOperacion {
+  id: string;
+  codigo: string;
+  ts: string;
+  tipo: Tipo;
+  parId: string;
+  monto: string;
+  cotiz: string;
+  contra: string;
+  cobertura: CoberturaTipo;
+  status: string;
+  operadorId: string;
+  clienteId: string | null;
+  cliente?: { nombre: string; apellido?: string | null } | null;
+  operador?: { id: string; nombre: string } | null;
+  notas: string | null;
+}
 
+interface ApiPar {
+  par: string;
+  base: string;
+  quote: string;
+  nombre: string;
+  compra: string;
+  venta: string;
+  decimals: number;
+}
+
+interface ApiCliente {
+  id: string;
+  nombre: string;
+  apellido?: string | null;
+  doc?: string | null;
+  cuentas?: Array<{ id: string; banco: string; alias: string; numero: string; moneda?: string | null }>;
+}
+
+function parFromApi(p: ApiPar): Par {
+  return {
+    par: p.par,
+    base: p.base,
+    quote: p.quote,
+    nombre: p.nombre,
+    compra: p.compra,
+    venta: p.venta,
+    decimals: p.decimals,
+  };
+}
+
+function clienteFromApi(c: ApiCliente): Cliente {
+  return {
+    id: c.id,
+    nombre: c.apellido ? `${c.nombre} ${c.apellido}` : c.nombre,
+    doc: c.doc ?? '',
+    cuentas: (c.cuentas ?? []).map((cu) => ({
+      id: cu.id,
+      banco: cu.banco,
+      alias: cu.alias,
+      cbu: cu.numero,
+      moneda: cu.moneda ?? 'ARS',
+    })),
+  };
+}
+
+/** Convierte una Operacion de la API al shape de UI, generando patas en memoria. */
+function operationFromApi(o: ApiOperacion, pares: Par[], clientes: Cliente[], existing?: Operation): Operation {
+  const parDef = pares.find((p) => p.par === o.parId) ?? pares[0];
+  const cli = o.clienteId ? clientes.find((c) => c.id === o.clienteId) : undefined;
+  const nombreCliente = o.cliente
+    ? o.cliente.apellido
+      ? `${o.cliente.nombre} ${o.cliente.apellido}`
+      : o.cliente.nombre
+    : cli?.nombre ?? '';
+
+  // Si ya teníamos esta operación en memoria, conservamos sus patas e
+  // instrucciones (viven sólo local, ver nota de limitación arriba) en
+  // vez de regenerarlas en cada refetch — si no, se perdería lo que el
+  // cadete/admin cargó a mano en la sesión actual.
+  if (existing && existing.id === o.id) {
     return {
-      id: `seed-${i}`,
-      codigo: `OP-${String(i + 1).padStart(4, '0')}`,
-      ts: new Date().toISOString(),
-      hora,
-      tipo,
-      par,
-      monto,
-      cotiz,
-      contra,
-      cobertura,
-      status,
-      operadorId: TRADERS[i % TRADERS.length].id,
-      clienteId,
-      cliente,
-      notas: null,
-      patas,
-      instrucciones: i === 0 ? 'El cliente retira en oficina; la parte en pesos va a su cuenta.' : '',
+      ...existing,
+      codigo: o.codigo,
+      ts: o.ts,
+      hora: hhmm(o.ts),
+      tipo: o.tipo,
+      par: o.parId,
+      monto: o.monto,
+      cotiz: o.cotiz,
+      contra: o.contra,
+      cobertura: o.cobertura,
+      status: STATUS_FROM_API[o.status] ?? 'pendiente',
+      operadorId: o.operadorId,
+      clienteId: o.clienteId,
+      cliente: nombreCliente,
+      notas: o.notas,
     };
-  });
+  }
+
+  const patas = parDef
+    ? crearPatas(
+        { tipo: o.tipo, monto: o.monto, contra: o.contra, cobertura: o.cobertura },
+        parDef,
+        cli?.cuentas?.[0]
+      )
+    : [];
+
+  return {
+    id: o.id,
+    codigo: o.codigo,
+    ts: o.ts,
+    hora: hhmm(o.ts),
+    tipo: o.tipo,
+    par: o.parId,
+    monto: o.monto,
+    cotiz: o.cotiz,
+    contra: o.contra,
+    cobertura: o.cobertura,
+    status: STATUS_FROM_API[o.status] ?? 'pendiente',
+    operadorId: o.operadorId,
+    clienteId: o.clienteId,
+    cliente: nombreCliente,
+    notas: o.notas,
+    patas,
+    instrucciones: '',
+  };
 }
 
 /* =============================================================
@@ -332,211 +423,312 @@ function seedOps(): Operation[] {
 interface CajaContextType {
   state: CajaState;
   dispatch: (action: any) => void;
+  /** Agregados, opcionales de consumir — no cambian el contrato existente. */
+  loading: boolean;
+  error: string | null;
 }
 
 const CajaContext = createContext<CajaContextType | null>(null);
 
 export function CajaProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<CajaState>({
-    diaAbierto: true,
-    operaciones: seedOps(),
-    clientes: CLIENTES,
-    pares: PARES,
-    traders: TRADERS,
-    lastOperadorId: 't1',
-  });
+  const [state, setState] = useState<CajaState>(EMPTY_STATE);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  // Referencia mutable al state para que el dispatch (useCallback sin
+  // deps de state) siempre lea el valor más reciente sin tener que
+  // recrearse en cada render.
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
-  const dispatch = useCallback((action: any) => {
-    setState((prev) => {
-      switch (action.type) {
-        case 'ABRIR_DIA':
-          return { ...prev, diaAbierto: true };
-
-        case 'CERRAR_DIA':
-          return { ...prev, diaAbierto: false };
-
-        case 'ADD_OP': {
-          const p = action.payload;
-          const contra = p.monto * p.cotiz;
-          const cobertura = p.cobertura ?? 'efectivo';
-          const parDef = prev.pares.find((x) => x.par === p.par) ?? prev.pares[0];
-          const cli = prev.clientes.find((c) => c.id === p.clienteId);
-
-          const nueva: Operation = {
-            id: crypto.randomUUID(),
-            codigo: `OP-${String(prev.operaciones.length + 1).padStart(4, '0')}`,
-            ts: new Date().toISOString(),
-            hora: hhmm(),
-            tipo: p.tipo,
-            par: p.par,
-            monto: p.monto,
-            cotiz: p.cotiz,
-            contra,
-            cobertura,
-            status: 'pendiente',
-            operadorId: p.operadorId,
-            clienteId: p.clienteId || null,
-            cliente: p.cliente ?? '',
-            notas: null,
-            // El e-ticket nace ya armado según el tipo de operación
-            patas: crearPatas(
-              { tipo: p.tipo, monto: p.monto, contra, cobertura },
-              parDef,
-              cli?.cuentas?.[0]
-            ),
-            instrucciones: '',
-          };
-          return {
-            ...prev,
-            operaciones: [...prev.operaciones, nueva],
-            lastOperadorId: p.operadorId || prev.lastOperadorId,
-          };
-        }
-
-        case 'EDIT_OP': {
-          return {
-            ...prev,
-            operaciones: prev.operaciones.map((o) => {
-              if (o.id !== action.id) return o;
-              const patched = { ...o, ...action.patch };
-              // Recalcular contra si cambió monto o cotización
-              if ('monto' in action.patch || 'cotiz' in action.patch) {
-                patched.contra = patched.monto * patched.cotiz;
-
-                // Las patas siguen al monto: si nadie las tocó a mano,
-                // se reajustan solas para no quedar desfasadas.
-                const parDef = prev.pares.find((x) => x.par === patched.par) ?? prev.pares[0];
-                const montos = patasDe(patched, parDef);
-                patched.patas = patched.patas.map((pata: Pata) => ({
-                  ...pata,
-                  monto: montos[pata.direccion].monto,
-                  moneda: montos[pata.direccion].moneda,
-                }));
-              }
-              return patched;
-            }),
-          };
-        }
-
-        case 'CYCLE_OP_STATUS': {
-          return {
-            ...prev,
-            operaciones: prev.operaciones.map((o) =>
-              o.id === action.id
-                ? { ...o, status: STATUS_CYCLE[(STATUS_CYCLE.indexOf(o.status) + 1) % STATUS_CYCLE.length] }
-                : o
-            ),
-          };
-        }
-
-        case 'DELETE_OP':
-          return { ...prev, operaciones: prev.operaciones.filter((o) => o.id !== action.id) };
-
-        case 'SET_LAST_OPERADOR':
-          return { ...prev, lastOperadorId: action.id };
-
-        case 'SET_PAR_RATE': {
-          return {
-            ...prev,
-            pares: prev.pares.map((p) =>
-              p.par === action.par ? { ...p, compra: action.compra, venta: action.venta } : p
-            ),
-          };
-        }
-
-        /* ── Patas del e-ticket ── */
-
-        /** Edita una pata. Al cambiar de método limpia los campos que ya no aplican. */
-        case 'EDIT_PATA': {
-          const mapPata = (p: Pata): Pata => {
-            if (p.id !== action.pataId) return p;
-            const next = { ...p, ...action.patch };
-
-            if (action.patch.metodo && action.patch.metodo !== p.metodo) {
-              // Campos de efectivo
-              delete next.direccionEntrega;
-              delete next.nombreRecibe;
-              delete next.telefono;
-              delete next.horario;
-              // Campos de depósito
-              delete next.cuentaId;
-              delete next.banco;
-              delete next.alias;
-              // Contra saldo no requiere comprobante: queda saldada
-              if (action.patch.metodo === 'saldo') {
-                next.estado = 'confirmado';
-                next.comprobante = null;
-              } else {
-                next.estado = 'pendiente';
-              }
-            }
-            return next;
-          };
-
-          return {
-            ...prev,
-            operaciones: prev.operaciones.map((o) =>
-              o.id === action.opId ? { ...o, patas: o.patas.map(mapPata) } : o
-            ),
-          };
-        }
-
-        /** El cadete sube (o borra) el comprobante de una pata */
-        case 'SET_COMPROBANTE': {
-          return {
-            ...prev,
-            operaciones: prev.operaciones.map((o) =>
-              o.id === action.opId
-                ? {
-                    ...o,
-                    patas: o.patas.map((p) =>
-                      p.id === action.pataId
-                        ? {
-                            ...p,
-                            comprobante: action.comprobante,
-                            estado: (action.comprobante ? 'hecho' : 'pendiente') as PataEstado,
-                          }
-                        : p
-                    ),
-                  }
-                : o
-            ),
-          };
-        }
-
-        /** El admin confirma que la pata está correctamente liquidada */
-        case 'CONFIRMAR_PATA': {
-          return {
-            ...prev,
-            operaciones: prev.operaciones.map((o) =>
-              o.id === action.opId
-                ? {
-                    ...o,
-                    patas: o.patas.map((p) =>
-                      p.id === action.pataId ? { ...p, estado: 'confirmado' as PataEstado } : p
-                    ),
-                  }
-                : o
-            ),
-          };
-        }
-
-        case 'SET_INSTRUCCIONES': {
-          return {
-            ...prev,
-            operaciones: prev.operaciones.map((o) =>
-              o.id === action.opId ? { ...o, instrucciones: action.texto } : o
-            ),
-          };
-        }
-
-        default:
-          return prev;
-      }
-    });
+  const refetchOperaciones = useCallback(async () => {
+    const res = await api.get<{ data: ApiOperacion[] }>('/operations?pageSize=200');
+    setState((prev) => ({
+      ...prev,
+      operaciones: res.data
+        .filter((o) => o.status !== 'cancelada')
+        .map((o) => operationFromApi(o, prev.pares, prev.clientes, prev.operaciones.find((x) => x.id === o.id))),
+    }));
   }, []);
 
-  const value = useMemo(() => ({ state, dispatch }), [state, dispatch]);
+  const refetchKpis = useCallback(async () => {
+    try {
+      const [kpisPar, kpisOperador] = await Promise.all([
+        api.get<{ stats: KpiPar[] }>('/operations/kpis/par'),
+        api.get<{ stats: KpiOperador[] }>('/operations/kpis/operador'),
+      ]);
+      setState((prev) => ({ ...prev, kpisPar: kpisPar.stats, kpisOperador: kpisOperador.stats }));
+    } catch {
+      // Los KPIs son complementarios — si fallan, no bloqueamos la carga
+      // principal de la mesa.
+    }
+  }, []);
+
+  // Carga inicial
+  useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      try {
+        const [paresRes, clientesRes, opsRes] = await Promise.all([
+          api.get<ApiPar[]>('/quotations'),
+          api.get<{ data: ApiCliente[] }>('/customers?pageSize=200'),
+          api.get<{ data: ApiOperacion[] }>('/operations?pageSize=200'),
+        ]);
+        if (cancelado) return;
+
+        const pares = paresRes.map(parFromApi);
+        const clientes = clientesRes.data.map(clienteFromApi);
+        const operaciones = opsRes.data
+          .filter((o) => o.status !== 'cancelada')
+          .map((o) => operationFromApi(o, pares, clientes));
+
+        // "traders": no hay GET /users para OPERADOR (ADMIN-only). El
+        // nombre de cada operador viaja en la propia Operacion — se arma
+        // la lista de traders a partir de los operadores que aparecen en
+        // las operaciones del día (R5 de ANALISIS-FASES-3-4-5.md).
+        const tradersMap = new Map<string, Trader>();
+        for (const o of opsRes.data) {
+          if (o.operador && !tradersMap.has(o.operador.id)) {
+            tradersMap.set(o.operador.id, {
+              id: o.operador.id,
+              name: o.operador.nombre,
+              initials: o.operador.nombre
+                .split(' ')
+                .map((p) => p[0])
+                .slice(0, 2)
+                .join('')
+                .toUpperCase(),
+              desk: 'Mesa 1',
+              active: true,
+            });
+          }
+        }
+
+        setState({
+          diaAbierto: true,
+          operaciones,
+          clientes,
+          pares,
+          traders: Array.from(tradersMap.values()),
+          lastOperadorId: operaciones[0]?.operadorId ?? '',
+          kpisPar: [],
+          kpisOperador: [],
+        });
+
+        void refetchKpis();
+      } catch (e) {
+        if (!cancelado) setError(mensajeDe(e));
+      } finally {
+        if (!cancelado) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [refetchKpis]);
+
+  const dispatch = useCallback(
+    (action: any) => {
+      // La mayoría de las acciones son async contra la API; la firma
+      // pública sigue devolviendo void (igual que antes), el await vive
+      // adentro. Ver ANALISIS-FASES-3-4-5.md §1.
+      void (async () => {
+        try {
+          switch (action.type) {
+            case 'ABRIR_DIA':
+              setState((prev) => ({ ...prev, diaAbierto: true }));
+              return;
+
+            case 'CERRAR_DIA':
+              setState((prev) => ({ ...prev, diaAbierto: false }));
+              return;
+
+            case 'ADD_OP': {
+              const p = action.payload;
+              await api.post('/operations', {
+                tipo: p.tipo,
+                parId: p.par,
+                monto: String(p.monto),
+                cotiz: p.cotiz != null ? String(p.cotiz) : undefined,
+                cobertura: p.cobertura ?? 'efectivo',
+                clienteId: p.clienteId || undefined,
+              });
+              await refetchOperaciones();
+              await refetchKpis();
+              if (p.operadorId) {
+                setState((prev) => ({ ...prev, lastOperadorId: p.operadorId }));
+              }
+              return;
+            }
+
+            case 'EDIT_OP': {
+              const patch: Record<string, unknown> = {};
+              if ('monto' in action.patch) patch.monto = String(action.patch.monto);
+              if ('cotiz' in action.patch) patch.cotiz = String(action.patch.cotiz);
+              if ('cobertura' in action.patch) patch.cobertura = action.patch.cobertura;
+              if ('notas' in action.patch) patch.notas = action.patch.notas;
+
+              // 'cliente' (nombre de texto libre) no tiene equivalente en
+              // el backend — Operacion sólo guarda clienteId (FK). Si
+              // sólo se edita el nombre a mano (como hace la planilla hoy
+              // con el datalist), lo reflejamos en memoria nomás; no hay
+              // endpoint para "renombrar cliente de una operación suelta".
+              if ('cliente' in action.patch && Object.keys(patch).length === 0) {
+                setState((prev) => ({
+                  ...prev,
+                  operaciones: prev.operaciones.map((o) =>
+                    o.id === action.id ? { ...o, cliente: action.patch.cliente } : o
+                  ),
+                }));
+                return;
+              }
+
+              if (Object.keys(patch).length > 0) {
+                await api.put(`/operations/${action.id}`, patch);
+                await refetchOperaciones();
+                await refetchKpis();
+              }
+              return;
+            }
+
+            case 'CYCLE_OP_STATUS': {
+              const current = stateRef.current.operaciones.find((o) => o.id === action.id);
+              if (!current) return;
+              const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(current.status) + 1) % STATUS_CYCLE.length];
+              if (next === 'finalizada') {
+                await api.post(`/operations/${action.id}/finalize`);
+              } else if (next === 'ejecucion') {
+                await api.put(`/operations/${action.id}`, { status: STATUS_TO_API.ejecucion });
+              } else {
+                await api.put(`/operations/${action.id}`, { status: STATUS_TO_API.pendiente });
+              }
+              await refetchOperaciones();
+              await refetchKpis();
+              return;
+            }
+
+            case 'DELETE_OP': {
+              // No existe DELETE /operations/:id (inmutabilidad post-cierre
+              // es la regla del dominio) — "eliminar" desde la planilla es
+              // cancelar.
+              await api.post(`/operations/${action.id}/cancel`);
+              await refetchOperaciones();
+              await refetchKpis();
+              return;
+            }
+
+            case 'SET_LAST_OPERADOR':
+              setState((prev) => ({ ...prev, lastOperadorId: action.id }));
+              return;
+
+            case 'SET_PAR_RATE': {
+              const [base, quote] = action.par.split('/');
+              await api.put(`/quotations/${base}/${quote}`, {
+                compra: String(action.compra),
+                venta: String(action.venta),
+              });
+              const pares = await api.get<ApiPar[]>('/quotations');
+              setState((prev) => ({ ...prev, pares: pares.map(parFromApi) }));
+              return;
+            }
+
+            /* ── Patas del e-ticket — sólo memoria local, ver nota de
+               limitación conocida al tope del archivo. No hay endpoint
+               de backend equivalente todavía. ── */
+
+            case 'EDIT_PATA': {
+              const mapPata = (p: Pata): Pata => {
+                if (p.id !== action.pataId) return p;
+                const next = { ...p, ...action.patch };
+
+                if (action.patch.metodo && action.patch.metodo !== p.metodo) {
+                  delete next.direccionEntrega;
+                  delete next.nombreRecibe;
+                  delete next.telefono;
+                  delete next.horario;
+                  delete next.cuentaId;
+                  delete next.banco;
+                  delete next.alias;
+                  if (action.patch.metodo === 'saldo') {
+                    next.estado = 'confirmado';
+                    next.comprobante = null;
+                  } else {
+                    next.estado = 'pendiente';
+                  }
+                }
+                return next;
+              };
+
+              setState((prev) => ({
+                ...prev,
+                operaciones: prev.operaciones.map((o) =>
+                  o.id === action.opId ? { ...o, patas: o.patas.map(mapPata) } : o
+                ),
+              }));
+              return;
+            }
+
+            case 'SET_COMPROBANTE': {
+              setState((prev) => ({
+                ...prev,
+                operaciones: prev.operaciones.map((o) =>
+                  o.id === action.opId
+                    ? {
+                        ...o,
+                        patas: o.patas.map((p) =>
+                          p.id === action.pataId
+                            ? {
+                                ...p,
+                                comprobante: action.comprobante,
+                                estado: (action.comprobante ? 'hecho' : 'pendiente') as PataEstado,
+                              }
+                            : p
+                        ),
+                      }
+                    : o
+                ),
+              }));
+              return;
+            }
+
+            case 'CONFIRMAR_PATA': {
+              setState((prev) => ({
+                ...prev,
+                operaciones: prev.operaciones.map((o) =>
+                  o.id === action.opId
+                    ? {
+                        ...o,
+                        patas: o.patas.map((p) =>
+                          p.id === action.pataId ? { ...p, estado: 'confirmado' as PataEstado } : p
+                        ),
+                      }
+                    : o
+                ),
+              }));
+              return;
+            }
+
+            case 'SET_INSTRUCCIONES': {
+              setState((prev) => ({
+                ...prev,
+                operaciones: prev.operaciones.map((o) =>
+                  o.id === action.opId ? { ...o, instrucciones: action.texto } : o
+                ),
+              }));
+              return;
+            }
+
+            default:
+              return;
+          }
+        } catch (e) {
+          setError(mensajeDe(e));
+        }
+      })();
+    },
+    [refetchOperaciones, refetchKpis]
+  );
+
+  const value = useMemo(() => ({ state, dispatch, loading, error }), [state, dispatch, loading, error]);
 
   return <CajaContext.Provider value={value}>{children}</CajaContext.Provider>;
 }
@@ -549,6 +741,11 @@ export function useCaja() {
 
 /* =============================================================
    Selectores / cálculos
+   -------------------------------------------------------------
+   F3: statsForPar/posicionRealizada YA NO CALCULAN NADA sobre
+   floats. Son adaptadores de lectura sobre los KPIs que manda el
+   backend (GET /operations/kpis/par), que calcula con decimal.js
+   precisión 30 + ROUND_HALF_EVEN. Cero aritmética financiera acá.
    ============================================================= */
 
 export interface ParStats {
@@ -569,35 +766,37 @@ export interface ParStats {
   posicion: number;
 }
 
+const EMPTY_KPI_PAR: Omit<KpiPar, 'par'> = {
+  totalCompras: 0,
+  totalVentas: 0,
+  compraPromedio: 0,
+  ventaPromedio: 0,
+  spreadPromedio: 0,
+  volumenTotalUsd: 0,
+  nOps: 0,
+  gananciaEstimadaUsd: 0,
+};
+
 export function statsForPar(state: CajaState, par: string): ParStats {
   const ops = state.operaciones.filter((o) => o.par === par);
   const compras = ops.filter((o) => o.tipo === 'C');
   const ventas = ops.filter((o) => o.tipo === 'V');
 
-  const sumContra = (arr: Operation[]) => arr.reduce((s, o) => s + o.contra, 0);
-  const sumMonto = (arr: Operation[]) => arr.reduce((s, o) => s + o.monto, 0);
-
-  const usados = sumContra(compras);
-  const hechos = sumContra(ventas);
-  const baseCompra = sumMonto(compras);
-  const baseVenta = sumMonto(ventas);
-
-  const promCompra = baseCompra > 0 ? usados / baseCompra : 0;
-  const promVenta = baseVenta > 0 ? hechos / baseVenta : 0;
+  const kpi = state.kpisPar.find((k) => k.par === par) ?? { par, ...EMPTY_KPI_PAR };
 
   return {
     par,
     ops,
     compras,
     ventas,
-    usados,
-    hechos,
-    baseCompra,
-    baseVenta,
-    promCompra,
-    promVenta,
-    spread: promVenta - promCompra,
-    posicion: baseCompra - baseVenta,
+    usados: kpi.totalCompras * kpi.compraPromedio,
+    hechos: kpi.totalVentas * kpi.ventaPromedio,
+    baseCompra: kpi.totalCompras,
+    baseVenta: kpi.totalVentas,
+    promCompra: kpi.compraPromedio,
+    promVenta: kpi.ventaPromedio,
+    spread: kpi.spreadPromedio,
+    posicion: kpi.totalCompras - kpi.totalVentas,
   };
 }
 
@@ -608,12 +807,12 @@ export interface PosRealizada {
   realizedQuote: number;
 }
 
-/** Ganancia realizada del par: sólo sobre el volumen calzado. */
+/** Ganancia realizada del par — leída directo del KPI del backend. */
 export function posicionRealizada(state: CajaState, par: string): PosRealizada {
-  const s = statsForPar(state, par);
-  const matchedBase = Math.min(s.baseCompra, s.baseVenta);
-  const realizedQuote = matchedBase * (s.promVenta - s.promCompra);
-  return { matchedBase, realizedQuote };
+  const kpi = state.kpisPar.find((k) => k.par === par);
+  if (!kpi) return { matchedBase: 0, realizedQuote: 0 };
+  const matchedBase = Math.min(kpi.totalCompras, kpi.totalVentas);
+  return { matchedBase, realizedQuote: kpi.gananciaEstimadaUsd };
 }
 
 export interface PosAbierta {
@@ -635,7 +834,7 @@ export function posicionAbierta(state: CajaState, par: string): PosAbierta | nul
   if (Math.abs(neto) < POS_ABIERTA_UMBRAL) return null;
 
   const pdef = state.pares.find((p) => p.par === par);
-  const mid = pdef ? (pdef.compra + pdef.venta) / 2 : 0;
+  const mid = pdef ? (Number(pdef.compra) + Number(pdef.venta)) / 2 : 0;
 
   return { base: neto, isLong: neto > 0, valorQuote: Math.abs(neto) * mid };
 }
