@@ -30,55 +30,73 @@
 }
 
 /* ────────────────────────────────────────────────────────────────
+   1b. DARK VARIANT — activa clases con[data-theme=dark] o[data-theme=dark]*
+   ──────────────────────────────────────────────────────────────── */
+
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+/* ────────────────────────────────────────────────────────────────
    2. LIGHT MODE — variables de material
    ──────────────────────────────────────────────────────────────── */
 
 :root {
   color-scheme: light;
 
-  /* Acento */
-  --blue: #0071E3;
-  --blue-hover: #0077ED;
-  --blue-active: #0062C4;
-  --blue-subtle: rgba(0, 113, 227, 0.10);
-  --blue-glow: rgba(0, 113, 227, 0.28);
+  /* ── SEMANTIC TOKENS (contrato A1) ── */
+  --surface: #ffffff;
+  --surface-raised: #f5f5f7;
+  --text-primary: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --text-tertiary: #8e8e93;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.14);
+  --accent: #0071e3;
+  --accent-hover: #0077ed;
+  --accent-active: #0062c4;
+  --accent-subtle: rgba(0, 113, 227, 0.10);
+  --accent-glow: rgba(0, 113, 227, 0.28);
+  --danger: #ff3b30;
+  --danger-subtle: rgba(255, 59, 48, 0.12);
+  --success: #34c759;
+  --success-subtle: rgba(52, 199, 89, 0.12);
+  --warning: #ff9500;
+  --warning-subtle: rgba(255, 149, 0, 0.12);
+  --info: #af52de;
+  --info-subtle: rgba(175, 82, 222, 0.12);
+  --overlay: rgba(0, 0, 0, 0.45);
 
-  /* Tinta / texto */
-  --warm-gray-1: #1D1D1F;
-  --warm-gray-2: #6E6E73;
-  --warm-gray-3: #8E8E93;
-  --warm-gray-4: #C7C7CC;
-  --warm-gray-5: #E5E5EA;
+  /* ── ESPECULAR (brillo vidrio) ── */
+  --specular-light: rgba(255, 255, 255, 0.35);
+  --specular-btn: rgba(255, 255, 255, 0.4);
 
-  /* Fondo con luz ambiental (lo que hace "flotar" el vidrio) */
-  --bg-base: #EFEFF4;
+  /* ── ALCANZABLE ── */
+  --focus-ring: 0 0 0 4px var(--accent-glow);
+
+  /* ── ALIAS — mantienen backward-compat con ~105 usos ── */
+  --blue: var(--accent);
+  --blue-hover: var(--accent-hover);
+  --blue-active: var(--accent-active);
+  --blue-subtle: var(--accent-subtle);
+  --blue-glow: var(--accent-glow);
+  --warm-gray-1: var(--text-primary);
+  --warm-gray-2: var(--text-secondary);
+  --warm-gray-3: var(--text-tertiary);
+  --warm-gray-4: #c7c7cc;
+  --warm-gray-5: #e5e5ea;
+  --bg-base: #efeff4;
   --bg-ambient:
     radial-gradient(1200px 800px at 12% -10%, rgba(0, 122, 255, 0.18), transparent 60%),
     radial-gradient(1000px 700px at 88% 8%, rgba(175, 82, 222, 0.14), transparent 62%),
     radial-gradient(900px 900px at 50% 110%, rgba(48, 209, 88, 0.10), transparent 60%);
-  --bg-surface: #FFFFFF;
+  --bg-surface: var(--surface);
 
-  /* Semánticos */
-  --success: #34C759;
-  --success-subtle: rgba(52, 199, 89, 0.12);
-  --danger: #FF3B30;
-  --danger-subtle: rgba(255, 59, 48, 0.12);
-  --warning: #FF9500;
-  --warning-subtle: rgba(255, 149, 0, 0.12);
-  --info: #AF52DE;
-  --info-subtle: rgba(175, 82, 222, 0.12);
-
-  --border: rgba(0, 0, 0, 0.08);
-  --border-strong: rgba(0, 0, 0, 0.14);
-
-  /* ── MATERIAL LIQUID GLASS ── */
+  /* ── MATERIAL LIQUID GLASS (light) ── */
   --glass-bg: rgba(255, 255, 255, 0.55);
   --glass-bg-thick: rgba(255, 255, 255, 0.72);
   --glass-bg-thin: rgba(255, 255, 255, 0.38);
   --glass-blur: 28px;
   --glass-saturate: 180%;
   --glass-border: rgba(255, 255, 255, 0.65);
-  /* Specular: brillo superior + sombra inferior interna = volumen */
   --glass-specular:
     inset 0 1px 0 0 rgba(255, 255, 255, 0.90),
     inset 0 -1px 0 0 rgba(255, 255, 255, 0.22),
@@ -90,8 +108,6 @@
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
   --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.06);
   --shadow-float: 0 28px 70px rgba(0, 0, 0, 0.18), 0 8px 20px rgba(0, 0, 0, 0.08);
-
-  --focus-ring: 0 0 0 4px var(--blue-glow);
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -100,95 +116,60 @@
    data-theme="light" siempre gana y fuerza el modo claro.
    ──────────────────────────────────────────────────────────────── */
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    color-scheme: dark;
-
-    --blue: #0A84FF;
-    --blue-hover: #3D9BFF;
-    --blue-active: #0071E3;
-    --blue-subtle: rgba(10, 132, 255, 0.18);
-    --blue-glow: rgba(10, 132, 255, 0.35);
-
-    --warm-gray-1: #F5F5F7;
-    --warm-gray-2: #AEAEB2;
-    --warm-gray-3: #8E8E93;
-    --warm-gray-4: #48484A;
-    --warm-gray-5: #3A3A3C;
-
-    --bg-base: #000000;
-    --bg-ambient:
-      radial-gradient(1200px 800px at 12% -10%, rgba(10, 132, 255, 0.26), transparent 60%),
-      radial-gradient(1000px 700px at 88% 8%, rgba(191, 90, 242, 0.20), transparent 62%),
-      radial-gradient(900px 900px at 50% 110%, rgba(48, 209, 88, 0.12), transparent 60%);
-    --bg-surface: #1C1C1E;
-
-    --success: #30D158;
-    --success-subtle: rgba(48, 209, 88, 0.18);
-    --danger: #FF453A;
-    --danger-subtle: rgba(255, 69, 58, 0.18);
-    --warning: #FF9F0A;
-    --warning-subtle: rgba(255, 159, 10, 0.18);
-    --info: #BF5AF2;
-    --info-subtle: rgba(191, 90, 242, 0.18);
-
-    --border: rgba(255, 255, 255, 0.10);
-    --border-strong: rgba(255, 255, 255, 0.18);
-
-    --glass-bg: rgba(40, 40, 44, 0.55);
-    --glass-bg-thick: rgba(44, 44, 48, 0.75);
-    --glass-bg-thin: rgba(36, 36, 40, 0.40);
-    --glass-border: rgba(255, 255, 255, 0.14);
-    --glass-specular:
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.16),
-      inset 0 -1px 0 0 rgba(255, 255, 255, 0.05),
-      inset 1px 0 0 0 rgba(255, 255, 255, 0.07),
-      inset -1px 0 0 0 rgba(255, 255, 255, 0.07);
-
-    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
-    --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.4);
-    --shadow-float: 0 28px 70px rgba(0, 0, 0, 0.7), 0 8px 20px rgba(0, 0, 0, 0.45);
-  }
-}
-
-/* Override manual: el usuario eligió oscuro explícitamente */
-:root[data-theme='dark'] {
+[data-theme=dark] {
   color-scheme: dark;
 
-  --blue: #0A84FF;
-  --blue-hover: #3D9BFF;
-  --blue-active: #0071E3;
-  --blue-subtle: rgba(10, 132, 255, 0.18);
-  --blue-glow: rgba(10, 132, 255, 0.35);
+  /* ── SEMANTIC TOKENS (dark) ── */
+  --surface: #000000;
+  --surface-raised: #1c1c1e;
+  --text-primary: #f5f5f7;
+  --text-secondary: #8e8e93;
+  --text-tertiary: #636366;
+  --border: rgba(255, 255, 255, 0.12);
+  --border-strong: rgba(255, 255, 255, 0.22);
+  --accent: #0a84ff;
+  --accent-hover: #409cff;
+  --accent-active: #0074e4;
+  --accent-subtle: rgba(10, 132, 255, 0.18);
+  --accent-glow: rgba(10, 132, 255, 0.35);
+  --danger: #ff453a;
+  --danger-subtle: rgba(255, 69, 58, 0.18);
+  --success: #30d158;
+  --success-subtle: rgba(48, 209, 88, 0.18);
+  --warning: #ff9f0a;
+  --warning-subtle: rgba(255, 159, 10, 0.18);
+  --info: #bf5af2;
+  --info-subtle: rgba(191, 90, 242, 0.18);
+  --overlay: rgba(0, 0, 0, 0.60);
 
-  --warm-gray-1: #F5F5F7;
-  --warm-gray-2: #AEAEB2;
-  --warm-gray-3: #8E8E93;
-  --warm-gray-4: #48484A;
-  --warm-gray-5: #3A3A3C;
+  /* ── ESPECULAR (brillo vidrio, dark) ── */
+  --specular-light: rgba(255, 255, 255, 0.35);
+  --specular-btn: rgba(255, 255, 255, 0.4);
 
-  --bg-base: #000000;
+  /* ── ALIAS (backward-compat) ── */
+  --blue: var(--accent);
+  --blue-hover: var(--accent-hover);
+  --blue-active: var(--accent-active);
+  --blue-subtle: var(--accent-subtle);
+  --blue-glow: var(--accent-glow);
+  --warm-gray-1: var(--text-primary);
+  --warm-gray-2: var(--text-secondary);
+  --warm-gray-3: var(--text-tertiary);
+  --warm-gray-4: #48484a;
+  --warm-gray-5: #3a3a3c;
+  --bg-base: var(--surface);
   --bg-ambient:
     radial-gradient(1200px 800px at 12% -10%, rgba(10, 132, 255, 0.26), transparent 60%),
     radial-gradient(1000px 700px at 88% 8%, rgba(191, 90, 242, 0.20), transparent 62%),
     radial-gradient(900px 900px at 50% 110%, rgba(48, 209, 88, 0.12), transparent 60%);
-  --bg-surface: #1C1C1E;
+  --bg-surface: var(--surface);
 
-  --success: #30D158;
-  --success-subtle: rgba(48, 209, 88, 0.18);
-  --danger: #FF453A;
-  --danger-subtle: rgba(255, 69, 58, 0.18);
-  --warning: #FF9F0A;
-  --warning-subtle: rgba(255, 159, 10, 0.18);
-  --info: #BF5AF2;
-  --info-subtle: rgba(191, 90, 242, 0.18);
-
-  --border: rgba(255, 255, 255, 0.10);
-  --border-strong: rgba(255, 255, 255, 0.18);
-
+  /* ── MATERIAL LIQUID GLASS (dark) ── */
   --glass-bg: rgba(40, 40, 44, 0.55);
   --glass-bg-thick: rgba(44, 44, 48, 0.75);
   --glass-bg-thin: rgba(36, 36, 40, 0.40);
+  --glass-blur: 28px;
+  --glass-saturate: 180%;
   --glass-border: rgba(255, 255, 255, 0.14);
   --glass-specular:
     inset 0 1px 0 0 rgba(255, 255, 255, 0.16),
@@ -196,6 +177,8 @@
     inset 1px 0 0 0 rgba(255, 255, 255, 0.07),
     inset -1px 0 0 0 rgba(255, 255, 255, 0.07);
 
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.4);
   --shadow-float: 0 28px 70px rgba(0, 0, 0, 0.7), 0 8px 20px rgba(0, 0, 0, 0.45);
@@ -305,21 +288,8 @@ body {
 }
 
 /* El brillo del cristal se atenúa en oscuro (sistema o manual) */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .panel::after,
-  :root:not([data-theme='light']) .card::after {
-    background: linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.07) 0%,
-      rgba(255, 255, 255, 0) 40%,
-      rgba(255, 255, 255, 0) 60%,
-      rgba(255, 255, 255, 0.04) 100%
-    );
-  }
-}
-
-:root[data-theme='dark'] .panel::after,
-:root[data-theme='dark'] .card::after {
+[data-theme=dark] .panel::after,
+[data-theme=dark] .card::after {
   background: linear-gradient(
     135deg,
     rgba(255, 255, 255, 0.07) 0%,

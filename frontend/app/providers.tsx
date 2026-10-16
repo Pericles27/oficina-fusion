@@ -3,15 +3,16 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { CajaProvider } from '@/lib/caja-store';
 import { AuthProvider } from '@/lib/auth-context';
-import { getStoredTheme, setStoredTheme } from '@/lib/theme-storage';
+import { getTheme, setTheme, startThemeSync } from '@/lib/theme';
 import { Toaster } from '@/components/ui';
 
-type Theme = 'light' | 'dark';
+export type ThemeMode = 'light' | 'dark' | 'system';
 
 interface ThemeCtx {
-  theme: Theme;
+  theme: 'light' | 'dark';
+  mode: ThemeMode;
   toggleTheme: () => void;
-  setTheme: (t: Theme) => void;
+  setMode: (m: ThemeMode) => void;
 }
 
 const ThemeContext = createContext<ThemeCtx | null>(null);
@@ -23,29 +24,32 @@ export function useTheme(): ThemeCtx {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>('light');
+  const [mode, setModeState] = useState<ThemeMode>('system');
   const [mounted, setMounted] = useState(false);
 
-  // Hidratación: leer preferencia guardada o la del sistema
+  // Hidratación sincrónica con el script inline de layout.tsx
+  const resolved = getTheme();
+
   useEffect(() => {
-    const stored = getStoredTheme();
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    setThemeState(stored ?? (prefersDark ? 'dark' : 'light'));
     setMounted(true);
+    startThemeSync();
   }, []);
 
-  // Aplicar al DOM
   useEffect(() => {
     if (!mounted) return;
-    document.documentElement.dataset.theme = theme;
-    setStoredTheme(theme);
-  }, [theme, mounted]);
+    setTheme(mode);
+  }, [mode, mounted]);
 
-  const setTheme = (t: Theme) => setThemeState(t);
-  const toggleTheme = () => setThemeState((t) => (t === 'dark' ? 'light' : 'dark'));
+  const setMode = (m: ThemeMode) => setModeState(m);
+  const toggleTheme = () =>
+    setModeState((m) => {
+      if (m === 'system') return 'light';
+      if (m === 'light') return 'dark';
+      return 'system';
+    });
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
+    <ThemeContext.Provider value={{ theme: resolved, mode, toggleTheme, setMode }}>
       <AuthProvider>
         <CajaProvider>
           <div className="app-root">

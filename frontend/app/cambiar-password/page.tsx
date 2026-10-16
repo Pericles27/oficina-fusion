@@ -75,7 +75,7 @@ export default function CambiarPasswordPage() {
             style={{
               borderRadius: 'var(--radius-lg)',
               background: 'linear-gradient(180deg, var(--blue-hover), var(--blue))',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,.4), 0 14px 38px var(--blue-glow)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,.35), 0 14px 38px var(--accent-glow)',
             }}
           >
             <KeyRound className="w-8 h-8" />

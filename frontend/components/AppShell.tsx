@@ -4,6 +4,7 @@ import { useState, type ComponentType } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { PanelLeftClose, PanelLeftOpen, LogOut } from 'lucide-react';
+import { ThemeToggle } from './ThemeToggle';
 
 export interface NavEntry {
   label: string;
@@ -52,15 +53,15 @@ export function AppShell({ brand, brandIcon: BrandIcon, nav, user, onLogout, chi
               className="grid place-items-center w-10 h-10 shrink-0 text-white"
               style={{
                 borderRadius: 'var(--radius-sm)',
-                background: 'linear-gradient(180deg, var(--blue-hover), var(--blue))',
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,.35), 0 5px 16px var(--blue-glow)',
+                background: 'linear-gradient(180deg, var(--accent-hover), var(--accent))',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,.35), 0 5px 16px var(--accent-glow)',
               }}
             >
               <BrandIcon className="w-5 h-5" />
             </span>
             {expanded && (
               <span className="text-[17px] font-semibold tracking-tight truncate"
-                    style={{ color: 'var(--warm-gray-1)' }}>
+                    style={{ color: 'var(--text-primary)' }}>
                 {brand}
               </span>
             )}
@@ -74,6 +75,7 @@ export function AppShell({ brand, brandIcon: BrandIcon, nav, user, onLogout, chi
               <PanelLeftClose className="w-5 h-5" />
             </button>
           )}
+          {!expanded && <ThemeToggle />}
         </div>
 
         {!expanded && (
@@ -148,17 +150,18 @@ export function AppShell({ brand, brandIcon: BrandIcon, nav, user, onLogout, chi
               className="grid place-items-center w-9 h-9 shrink-0 text-white"
               style={{
                 borderRadius: 'var(--radius-xs)',
-                background: 'linear-gradient(180deg, var(--blue-hover), var(--blue))',
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,.35), 0 4px 12px var(--blue-glow)',
+                background: 'linear-gradient(180deg, var(--accent-hover), var(--accent))',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,.35), 0 4px 12px var(--accent-glow)',
               }}
             >
               <BrandIcon className="w-[18px] h-[18px]" />
             </span>
             <span className="text-[16px] font-semibold tracking-tight truncate"
-                  style={{ color: 'var(--warm-gray-1)' }}>
+                  style={{ color: 'var(--text-primary)' }}>
               {brand}
             </span>
           </Link>
+          <ThemeToggle />
           <span className="avatar avatar-sm">{user.initials}</span>
         </header>
 
