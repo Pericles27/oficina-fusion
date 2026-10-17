@@ -28,12 +28,18 @@ function isBrowser(): boolean {
 
 export function getToken(): string | null {
   if (!isBrowser()) return null;
-  return window.localStorage.getItem(TOKEN_KEY);
+  try {
+    return window.localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null; // Storage denegado no debe impedir montar la página/tema.
+  }
 }
 
 export function setToken(token: string): void {
   if (!isBrowser()) return;
-  window.localStorage.setItem(TOKEN_KEY, token);
+  try {
+    window.localStorage.setItem(TOKEN_KEY, token);
+  } catch { /* AuthProvider conserva la sesión en memoria hasta la recarga. */ }
 }
 
 /**
@@ -43,7 +49,9 @@ export function setToken(token: string): void {
  */
 export function clearToken(): void {
   if (!isBrowser()) return;
-  window.localStorage.removeItem(TOKEN_KEY);
+  try {
+    window.localStorage.removeItem(TOKEN_KEY);
+  } catch { /* No hay storage accesible; AuthProvider limpia su estado. */ }
 }
 
 /** Decodifica el payload del JWT sin validar la firma (sólo para leer roles

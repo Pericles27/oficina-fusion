@@ -3,10 +3,10 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { CajaProvider } from '@/lib/caja-store';
 import { AuthProvider } from '@/lib/auth-context';
-import { getTheme, setTheme, startThemeSync } from '@/lib/theme';
+import { setTheme, startThemeSync, type ThemeMode, type ThemeSnapshot } from '@/lib/theme';
 import { Toaster } from '@/components/ui';
 
-export type ThemeMode = 'light' | 'dark' | 'system';
+export type { ThemeMode } from '@/lib/theme';
 
 interface ThemeCtx {
   theme: 'light' | 'dark';
@@ -24,32 +24,18 @@ export function useTheme(): ThemeCtx {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [mode, setModeState] = useState<ThemeMode>('system');
-  const [mounted, setMounted] = useState(false);
+  // Snapshot SSR estable: leer la preferencia al montar sin escribir storage.
+  // El script síncrono ya aplicó el tema antes de que React hidrate.
+  const [snapshot, setSnapshot] = useState<ThemeSnapshot>({ mode: 'system', theme: 'light' });
+  useEffect(() => startThemeSync(setSnapshot), []);
 
-  // Hidratación sincrónica con el script inline de layout.tsx
-  const resolved = getTheme();
-
-  useEffect(() => {
-    setMounted(true);
-    startThemeSync();
-  }, []);
-
-  useEffect(() => {
-    if (!mounted) return;
-    setTheme(mode);
-  }, [mode, mounted]);
-
-  const setMode = (m: ThemeMode) => setModeState(m);
-  const toggleTheme = () =>
-    setModeState((m) => {
-      if (m === 'system') return 'light';
-      if (m === 'light') return 'dark';
-      return 'system';
-    });
+  const setMode = (mode: ThemeMode) => setSnapshot(setTheme(mode));
+  const toggleTheme = () => setMode(
+    snapshot.mode === 'system' ? 'light' : snapshot.mode === 'light' ? 'dark' : 'system'
+  );
 
   return (
-    <ThemeContext.Provider value={{ theme: resolved, mode, toggleTheme, setMode }}>
+    <ThemeContext.Provider value={{ ...snapshot, toggleTheme, setMode }}>
       <AuthProvider>
         <CajaProvider>
           <div className="app-root">

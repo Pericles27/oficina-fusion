@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { ThemeProvider } from './providers';
+import { THEME_INIT_SCRIPT } from '@/lib/theme';
 
 export const metadata: Metadata = {
   title: 'Oficina Fusion — Sistema de Gestión',
@@ -17,10 +18,6 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   viewportFit: 'cover',
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#EFEFF4' },
-    { media: '(prefers-color-scheme: dark)', color: '#000000' },
-  ],
 };
 
 export default function RootLayout({
@@ -30,7 +27,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es-AR" suppressHydrationWarning>
-      <head />
+      <head>
+        <script id="of-theme-init" dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body>
         <ThemeProvider>{children}</ThemeProvider>
       </body>

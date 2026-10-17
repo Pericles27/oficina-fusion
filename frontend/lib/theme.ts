@@ -1,102 +1,108 @@
-/**
- * Tema (claro / oscuro / sistema) — persistido en `localStorage` bajo
- * la clave `'of-theme'`. Separado de `lib/auth.ts` para que el `grep -rn
- * "localStorage" frontend/` del criterio de aceptación de A1 devuelva sólo
- * `lib/auth.ts`, `lib/theme.ts` y `app/layout.tsx`.
- *
- * API:
- *   getTheme()      → 'light' | 'dark' | 'system' (leído + resuelto)
- *   setTheme(t)     → persiste t y aplica `data-theme` al `<html>`
- *   resolveTheme()  → retorna 'light' | 'dark' según `prefers-color-scheme`
- *                     cuando el modo actual es 'system'.
- */
-
+/** Fuente única del tema: runtime y script síncrono usan la misma función. */
 const THEME_KEY = 'of-theme';
-const STORAGE_VALUES = new Set(['light', 'dark', 'system']);
+export const THEME_MODES = ['light', 'dark', 'system'] as const;
+export type ThemeMode = (typeof THEME_MODES)[number];
+export type ResolvedTheme = Exclude<ThemeMode, 'system'>;
+export const THEME_COLORS = { light: '#EFEFF4', dark: '#000000' } as const;
 
-/* ── localStorage ─────────────────────────────────────────────────────── */
-
-function getItem(): 'light' | 'dark' | 'system' | null {
-  if (typeof window === 'undefined') return null;
-  const v = window.localStorage.getItem(THEME_KEY);
-  return STORAGE_VALUES.has(v as string) ? (v as 'light' | 'dark' | 'system') : null;
+const THEME_CONFIG = { key: THEME_KEY, modes: THEME_MODES, colors: THEME_COLORS };
+export interface ThemeSnapshot {
+  mode: ThemeMode;
+  theme: ResolvedTheme;
 }
 
-function setItem(theme: 'light' | 'dark' | 'system'): void {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(THEME_KEY, theme);
-}
-
-/* ── Aplicar al DOM ───────────────────────────────────────────────────── */
-
-function applyTheme(theme: 'light' | 'dark'): void {
-  document.documentElement.dataset.theme = theme;
-}
-
-/* ── Public API ───────────────────────────────────────────────────────── */
-
-/** Devuelve el valor persistido (o 'system' de defecto) sin resolver. */
-export function getStoredMode(): 'light' | 'dark' | 'system' {
-  return getItem() ?? 'system';
-}
-
-/** Devuelve el tema resuelto (light | dark) según el modo actual. */
-export function resolveTheme(): 'light' | 'dark' {
-  const mode = getStoredMode();
-  if (mode === 'system') {
-    if (typeof window !== 'undefined') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+/**
+ * Autocontenida: se serializa para layout y también se ejecuta en runtime.
+ * No referenciar símbolos externos: su fuente debe funcionar sin el bundle.
+ * No escribe storage; únicamente setTheme persiste una decisión del usuario.
+ */
+function initializeTheme(config: typeof THEME_CONFIG, selected?: ThemeMode): ThemeSnapshot {
+  let mode: ThemeMode = selected ?? 'system';
+  let theme: ResolvedTheme = 'light';
+  try {
+    if (selected === undefined) {
+      try {
+        const stored = window.localStorage.getItem(config.key);
+        if (config.modes.includes(stored as ThemeMode)) mode = stored as ThemeMode;
+      } catch { /* Storage denegado: seguir sistema. */ }
     }
-    return 'light'; // SSR fallback
+    if (mode === 'system') {
+      try {
+        theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      } catch { /* Sin matchMedia: fallback claro. */ }
+    } else {
+      theme = mode;
+    }
+    document.documentElement.dataset.theme = theme;
+    // Propiedad exclusiva del tema: React no renderiza ni reclama esta meta.
+    let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"][data-of-theme]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'theme-color';
+      meta.setAttribute('data-of-theme', '');
+      meta.content = config.colors[theme];
+      document.head.appendChild(meta);
+    }
+    meta.content = config.colors[theme];
+  } catch { /* La inicialización nunca bloquea la página. */ }
+  return { mode, theme };
+}
+
+export const THEME_INIT_SCRIPT = `(${initializeTheme.toString()})(${JSON.stringify(THEME_CONFIG)});`;
+
+// Mantener la elección en esta sesión aunque el navegador niegue persistencia.
+let sessionMode: ThemeMode | undefined;
+
+export function getStoredMode(): ThemeMode {
+  if (sessionMode !== undefined) return sessionMode;
+  try {
+    const stored = window.localStorage.getItem(THEME_KEY);
+    return THEME_MODES.includes(stored as ThemeMode) ? stored as ThemeMode : 'system';
+  } catch {
+    return 'system';
   }
-  return mode;
 }
 
-/** Lee el tema desde localStorage + aplica al DOM, sin React. */
-export function hydrateTheme(): void {
-  const theme = resolveTheme();
-  applyTheme(theme);
+export function hydrateTheme(): ThemeSnapshot {
+  return initializeTheme(THEME_CONFIG, getStoredMode());
 }
 
-/** Persiste un nuevo modo y lo aplica inmediatamente. */
-export function setTheme(mode: 'light' | 'dark' | 'system'): void {
-  setItem(mode);
-  if (mode === 'system') {
-    applyTheme(resolveTheme());
-  } else {
-    applyTheme(mode);
-  }
+export function resolveTheme(): ResolvedTheme {
+  return hydrateTheme().theme;
 }
 
-/** Devuelve el tema actual (resuelto), para inicializar React. */
-export function getTheme(): 'light' | 'dark' {
+export function getTheme(): ResolvedTheme {
   return resolveTheme();
 }
 
-/* ── Reactivity: escuchar cambios de prefers-color-scheme ─────────────── */
-
-let mediaQuery: MediaQueryList | null = null;
-let themeHandler: ((e: MediaQueryListEvent | StorageEvent) => void) | null = null;
-
-export function startThemeSync(): void {
-  if (typeof window === 'undefined') return;
-  mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-  themeHandler = (e: MediaQueryListEvent | StorageEvent): void => {
-    if (getItem() === 'system') {
-      const prefers =
-        'matches' in e ? e.matches : mediaQuery?.matches ?? false;
-      applyTheme(prefers ? 'dark' : 'light');
-    }
-  };
-
-  // StorageEvent (otro tab cambia localStorage)
-  window.addEventListener('storage', themeHandler);
-  // MediaQueryListEvent (cambio de sistema operativo)
-  mediaQuery.addEventListener('change', themeHandler);
+export function setTheme(mode: ThemeMode): ThemeSnapshot {
+  sessionMode = mode;
+  try {
+    window.localStorage.setItem(THEME_KEY, mode);
+  } catch { /* La elección de sesión sigue funcionando sin storage. */ }
+  return hydrateTheme();
 }
 
-export function stopThemeSync(): void {
-  window.removeEventListener('storage', themeHandler as EventListener);
-  mediaQuery?.removeEventListener('change', themeHandler as EventListener);
-  themeHandler = null;
+/** Suscripción por montaje, sin persistir; devuelve siempre su cleanup. */
+export function startThemeSync(onChange: (snapshot: ThemeSnapshot) => void): () => void {
+  const update = () => onChange(hydrateTheme());
+  const storageHandler = (event: StorageEvent) => {
+    if (event.key !== null && event.key !== THEME_KEY) return;
+    sessionMode = undefined;
+    update();
+  };
+  const mediaHandler = () => {
+    if (getStoredMode() === 'system') update();
+  };
+  let media: MediaQueryList | undefined;
+  try {
+    media = window.matchMedia('(prefers-color-scheme: dark)');
+    media.addEventListener('change', mediaHandler);
+  } catch { /* Sin matchMedia: sigue operativo el toggle manual. */ }
+  window.addEventListener('storage', storageHandler);
+  update();
+  return () => {
+    window.removeEventListener('storage', storageHandler);
+    media?.removeEventListener('change', mediaHandler);
+  };
 }

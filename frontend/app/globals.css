@@ -39,7 +39,7 @@
    2. LIGHT MODE — variables de material
    ──────────────────────────────────────────────────────────────── */
 
-:root {
+:root, [data-theme=light] {
   color-scheme: light;
 
   /* ── SEMANTIC TOKENS (contrato A1) ── */
@@ -72,10 +72,6 @@
 
   /* ── ALCANZABLE ── */
   --focus-ring: 0 0 0 4px var(--accent-glow);
-
-  /* ── META THEME COLOR — valores literales (var() no funciona en meta) ── */
-  --theme-color-light: #EFEFF4;
-  --theme-color-dark: #000000;
 
   /* ── ALIAS — mantienen backward-compat con ~105 usos ── */
   --blue: var(--accent);
