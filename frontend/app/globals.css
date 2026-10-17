@@ -67,10 +67,15 @@
 
   /* ── ESPECULAR (brillo vidrio) ── */
   --specular-light: rgba(255, 255, 255, 0.35);
+  --specular-highlight: rgba(255, 255, 255, 0.35);
   --specular-btn: rgba(255, 255, 255, 0.4);
 
   /* ── ALCANZABLE ── */
   --focus-ring: 0 0 0 4px var(--accent-glow);
+
+  /* ── META THEME COLOR — valores literales (var() no funciona en meta) ── */
+  --theme-color-light: #EFEFF4;
+  --theme-color-dark: #000000;
 
   /* ── ALIAS — mantienen backward-compat con ~105 usos ── */
   --blue: var(--accent);
@@ -144,6 +149,7 @@
 
   /* ── ESPECULAR (brillo vidrio, dark) ── */
   --specular-light: rgba(255, 255, 255, 0.35);
+  --specular-highlight: rgba(255, 255, 255, 0.35);
   --specular-btn: rgba(255, 255, 255, 0.4);
 
   /* ── ALIAS (backward-compat) ── */

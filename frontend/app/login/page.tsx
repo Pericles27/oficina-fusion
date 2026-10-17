@@ -63,7 +63,7 @@ export default function LoginPage() {
             style={{
               borderRadius: 'var(--radius-lg)',
               background: 'linear-gradient(180deg, var(--blue-hover), var(--blue))',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,.35), 0 14px 38px var(--accent-glow)',
+              boxShadow: 'inset 0 1px 0 var(--specular-highlight), 0 14px 38px var(--accent-glow)',
             }}
           >
             <Building2 className="w-8 h-8" />

@@ -54,7 +54,7 @@ export function AppShell({ brand, brandIcon: BrandIcon, nav, user, onLogout, chi
               style={{
                 borderRadius: 'var(--radius-sm)',
                 background: 'linear-gradient(180deg, var(--accent-hover), var(--accent))',
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,.35), 0 5px 16px var(--accent-glow)',
+                boxShadow: 'inset 0 1px 0 var(--specular-highlight), 0 5px 16px var(--accent-glow)',
               }}
             >
               <BrandIcon className="w-5 h-5" />
@@ -151,7 +151,7 @@ export function AppShell({ brand, brandIcon: BrandIcon, nav, user, onLogout, chi
               style={{
                 borderRadius: 'var(--radius-xs)',
                 background: 'linear-gradient(180deg, var(--accent-hover), var(--accent))',
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,.35), 0 4px 12px var(--accent-glow)',
+                boxShadow: 'inset 0 1px 0 var(--specular-highlight), 0 4px 12px var(--accent-glow)',
               }}
             >
               <BrandIcon className="w-[18px] h-[18px]" />
