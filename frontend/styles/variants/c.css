@@ -1,0 +1,12 @@
+/* C — Contained glass: navbar only; every content primitive opaque. */
+.design-lab[data-variant=c] { --surface: #ffffff; --surface-raised: #e8f0f3; --bg-base: #e3eef2; --bg-ambient: radial-gradient(ellipse at 10% 0%, #bad9e2, transparent 65%); --text-primary: #112e38; --text-secondary: #405e69; --border: #bfd1d8; --border-strong: #88a7b4; --accent: #075c70; --lab-on-accent: #ffffff; --lab-radius: 22px; --lab-nav-glass: rgba(255,255,255,.86); }
+.design-lab[data-variant=c][data-theme=dark] { --surface: #152b35; --surface-raised: #203d49; --bg-base: #0b1c24; --bg-ambient: radial-gradient(ellipse at 10% 0%, #214957, transparent 65%); --text-primary: #edf9fc; --text-secondary: #b1cbd5; --border: #385b69; --border-strong: #648e9f; --accent: #9bdfee; --lab-on-accent: #12303b; --lab-nav-glass: rgba(21,43,53,.9); }
+.design-lab[data-variant=c] .lab-navbar { background: var(--lab-nav-glass); -webkit-backdrop-filter: blur(24px) saturate(130%); backdrop-filter: blur(24px) saturate(130%); border: 1px solid var(--border-strong); box-shadow: 0 10px 30px #00152218, inset 0 1px 0 #ffffff40; border-radius: 24px; }
+.design-lab[data-variant=c] .lab-heading h1 { font-size: clamp(30px, 4vw, 44px); letter-spacing: -.04em; }
+.design-lab[data-variant=c] .lab-main { gap: 28px; }
+.design-lab[data-variant=c] .panel-body { padding: 24px; }
+.design-lab[data-variant=c] .stat-card { padding: 22px; }
+.design-lab[data-variant=c] .lab-callout { border-radius: 16px; }
+.design-lab[data-variant=c] .lab-monogram { background: var(--surface-raised); border: 1px solid var(--border-strong); }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .design-lab[data-variant=c] .lab-navbar { background: var(--surface); } }
+@media (max-width: 640px) { .design-lab[data-variant=c] .panel-body { padding: 20px; } }

@@ -1,0 +1,12 @@
+/* A — Sistema: opaque, dense, inset lists. No glass. */
+.design-lab[data-variant=a] { --surface: #ffffff; --surface-raised: #e9edf2; --bg-base: #f0f2f6; --bg-ambient: none; --text-primary: #182230; --text-secondary: #49586b; --border: #cbd2dc; --border-strong: #9aa7b7; --accent: #164fa3; --lab-on-accent: #ffffff; --lab-radius: 10px; }
+.design-lab[data-variant=a][data-theme=dark] { --surface: #19222e; --surface-raised: #263345; --bg-base: #101720; --text-primary: #f3f6fb; --text-secondary: #b7c6da; --border: #3d5068; --border-strong: #61748b; --accent: #aacbff; --lab-on-accent: #10233c; }
+.design-lab[data-variant=a] .lab-main { gap: 18px; }
+.design-lab[data-variant=a] .lab-heading h1 { font-size: 28px; letter-spacing: -.025em; }
+.design-lab[data-variant=a] .panel-body { padding: 14px; }
+.design-lab[data-variant=a] .panel-header { padding: 12px 14px; }
+.design-lab[data-variant=a] .table td { padding-block: 10px; }
+.design-lab[data-variant=a] .lab-list { padding: 0 14px; background: var(--surface-raised); border-radius: 10px; }
+.design-lab[data-variant=a] .lab-list > div { padding-block: 12px; }
+.design-lab[data-variant=a] .lab-list > div:last-child { border: 0; }
+.design-lab[data-variant=a] .lab-navbar { border-radius: 10px; }

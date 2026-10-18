@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 import { CajaProvider } from '@/lib/caja-store';
 import { AuthProvider } from '@/lib/auth-context';
 import { setTheme, startThemeSync, type ThemeMode, type ThemeSnapshot } from '@/lib/theme';
@@ -24,6 +25,10 @@ export function useTheme(): ThemeCtx {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  // A2 fixture-only route, including normalized static-export URLs.
+  // A4 must remove this exception when deleting design-lab.
+  const isDesignLab = pathname?.replace(/\/+$/, '').replace(/\.html$/, '') === '/design-lab';
   // Snapshot SSR estable: leer la preferencia al montar sin escribir storage.
   // El script síncrono ya aplicó el tema antes de que React hidrate.
   const [snapshot, setSnapshot] = useState<ThemeSnapshot>({ mode: 'system', theme: 'light' });
@@ -34,16 +39,22 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     snapshot.mode === 'system' ? 'light' : snapshot.mode === 'light' ? 'dark' : 'system'
   );
 
+  const content = (
+    <div className="app-root">
+      {children}
+      <Toaster />
+    </div>
+  );
+
   return (
     <ThemeContext.Provider value={{ ...snapshot, toggleTheme, setMode }}>
-      <AuthProvider>
-        <CajaProvider>
-          <div className="app-root">
-            {children}
-            <Toaster />
-          </div>
-        </CajaProvider>
-      </AuthProvider>
+      {isDesignLab ? content : (
+        <AuthProvider>
+          <CajaProvider>
+            {content}
+          </CajaProvider>
+        </AuthProvider>
+      )}
     </ThemeContext.Provider>
   );
 }
