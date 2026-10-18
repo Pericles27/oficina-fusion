@@ -370,7 +370,7 @@ function BlotterTable({
    ============================================================= */
 
 export function OperationsBoard({ role = 'admin' }: { role?: 'admin' | 'cadete' }) {
-  const { state, dispatch } = useCaja();
+  const { state, dispatch, error } = useCaja();
   const [par, setPar] = useState(state.pares[0]?.par ?? 'USD/ARS');
 
   /** Operación cuyo e-ticket está abierto */
@@ -422,6 +422,17 @@ export function OperationsBoard({ role = 'admin' }: { role?: 'admin' | 'cadete' 
           Nueva op
         </button>
       </div>
+
+      {/* Banner de error del store — muestra reject de ADD_OP, etc. */}
+      {error && (
+        <div role="alert" className="card" style={{ border: '1px solid var(--danger)', background: 'var(--danger-subtle)', color: 'var(--text-primary)', padding: '10px 14px' }}>
+          <div className="flex items-center gap-2">
+            <AlertTriangle aria-hidden="true" className="w-4 h-4" style={{ color: 'var(--danger)' }} />
+            <strong style={{ color: 'var(--danger)' }}>Error:</strong>
+            <span>{error}</span>
+          </div>
+        </div>
+      )}
 
       {/* KPIs de la mesa */}
       <div className="mesa-kpis">

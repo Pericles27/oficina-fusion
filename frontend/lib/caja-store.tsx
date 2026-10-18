@@ -573,19 +573,24 @@ export function CajaProvider({ children }: { children: ReactNode }) {
                 return;
               }
 
-              await api.post('/operations', {
-                tipo: p.tipo,
-                parId: p.par,
-                monto: String(p.monto),
-                cotiz: p.cotiz != null ? String(p.cotiz) : undefined,
-                cobertura: p.cobertura ?? 'efectivo',
-                clienteId: p.clienteId || undefined,
-              });
-              await refetchOperaciones();
-              await refetchKpis();
-              if (p.operadorId) {
-                const operadorId = p.operadorId;
-                setState((prev) => ({ ...prev, lastOperadorId: operadorId }));
+              try {
+                await api.post('/operations', {
+                  tipo: p.tipo,
+                  parId: p.par,
+                  monto: String(p.monto),
+                  cotiz: p.cotiz != null ? String(p.cotiz) : undefined,
+                  cobertura: p.cobertura ?? 'efectivo',
+                  clienteId: p.clienteId || undefined,
+                });
+                setError(null); // limpiar error previo en éxito
+                await refetchOperaciones();
+                await refetchKpis();
+                if (p.operadorId) {
+                  const operadorId = p.operadorId;
+                  setState((prev) => ({ ...prev, lastOperadorId: operadorId }));
+                }
+              } catch (e) {
+                setError(mensajeDe(e));
               }
               return;
             }
