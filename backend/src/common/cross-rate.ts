@@ -24,7 +24,7 @@
 // Casos de uso:
 //   1) X === Y       → Decimal(1)
 //   2) desde === USD  → encuentra USD/HACIA y retorna tasa directa
-//   3) hacia  === USD → encuentra DESDE/USD y retorna 1/tasa
+//   3) hacia  === USD → encuentra DESDE/USD directa o inversa según forma
 //   4) niuno === USD  → cruzada: DESDO→USD→HACIA
 //
 // Errores explícitos (lanza Error):
@@ -121,25 +121,58 @@ export function crossRate(
     return new Decimal(1);
   }
 
-  // Normalizar pares y validar tasas
-  const normalizados = pairs.map((p) => ({
-    par: p.par.trim().toUpperCase(),
-    tasa: new Decimal(p.tasa.trim()),
-  }));
+  // Normalizar pares, validar tasa y par
+  const normalizados: Array<{ par: string; tasa: Decimal }> = [];
 
-  for (const p of normalizados) {
-    if (p.tasa.lte(0)) {
+  for (const p of pairs) {
+    const parTrim = p.par.trim().toUpperCase();
+    const tasaTrim = p.tasa.trim();
+
+    // Validar par: exactamente 2 componentes separados por '/'
+    const partes = parTrim.split('/');
+    if (partes.length !== 2) {
       throw new Error(
-        `crossRate: tasa inválida para ${p.par}: ${p.tasa.toString()} (debe ser > 0)`,
+        `crossRate: par malformado "${p.par}" — se requieren exactamente 2 monedas separadas por '/'`,
       );
     }
+    const [pBase, pQuote] = partes;
+    if (!pBase || !pQuote) {
+      throw new Error(
+        `crossRate: par malformado "${p.par}" — componentes vacíos`,
+      );
+    }
+
+    // Validar que USD esté presente en uno de los lados
+    if (pBase !== 'USD' && pQuote !== 'USD') {
+      throw new Error(
+        `crossRate: par "${parTrim}" no contiene USD — se exige pivote USD`,
+      );
+    }
+
+    // Parsear tasa y validar que sea número finito > 0
+    const tasaDec = new Decimal(tasaTrim);
+    if (tasaDec.isNaN()) {
+      throw new Error(
+        `crossRate: tasa no numérica para ${parTrim}: "${p.tasa}"`,
+      );
+    }
+    if (!tasaDec.isFinite()) {
+      throw new Error(
+        `crossRate: tasa no finita para ${parTrim}: "${p.tasa}" — se requiere número finito`,
+      );
+    }
+    if (tasaDec.lte(0)) {
+      throw new Error(
+        `crossRate: tasa inválida para ${parTrim}: ${tasaDec.toString()} (debe ser > 0)`,
+      );
+    }
+
+    normalizados.push({ par: parTrim, tasa: tasaDec });
   }
 
   // Caso 2: desde === USD (tasa directa USD→hacia)
   if (desdeTrim === 'USD') {
     // Necesitamos USD→hacia: 1 USD = X hacia
-    // Si par es USD/HACIA con tasa T → directo: X = T
-    // Si par es HACIA/USD con tasa T → invertir: X = 1/T
     for (const p of normalizados) {
       const [pBase, pQuote] = p.par.split('/');
       if (pBase === 'USD' && pQuote === haciaTrim) {
@@ -148,11 +181,7 @@ export function crossRate(
       }
       if (pBase === haciaTrim && pQuote === 'USD') {
         // 1 HACIA = T USD → invertir: 1 USD = 1/T HACIA
-        const inv = new Decimal(1).div(p.tasa);
-        if (inv.lte(0)) {
-          throw new Error(`crossRate: tasa cero en par inverso ${p.par}`);
-        }
-        return inv;
+        return new Decimal(1).div(p.tasa);
       }
     }
     throw new Error(
@@ -160,27 +189,17 @@ export function crossRate(
     );
   }
 
-  // Caso 3: hacia === USD (desde→USD, inversa 1/tasa si USD/de desde)
+  // Caso 3: hacia === USD (desde→USD, directa o inversa según forma)
   if (haciaTrim === 'USD') {
-    // Necesitamos desde→USD
-    // Si par es desde/USD con tasa T → directo: X = T
-    // Si par es USD/de desde con tasa T → invertir: X = 1/T
     for (const p of normalizados) {
       const [pBase, pQuote] = p.par.split('/');
       if (pBase === desdeTrim && pQuote === 'USD') {
         // 1 desde = T USD → directo
-        if (p.tasa.lte(0)) {
-          throw new Error(`crossRate: tasa cero en ${p.par}`);
-        }
         return p.tasa;
       }
       if (pBase === 'USD' && pQuote === desdeTrim) {
         // 1 USD = T desde → invertir: 1 desde = 1/T USD
-        const inv = new Decimal(1).div(p.tasa);
-        if (inv.lte(0)) {
-          throw new Error(`crossRate: tasa cero en inverso ${p.par}`);
-        }
-        return inv;
+        return new Decimal(1).div(p.tasa);
       }
     }
     throw new Error(

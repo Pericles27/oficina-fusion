@@ -125,6 +125,47 @@ describe('crossRate', () => {
     );
   });
 
+  // === Pruebas adversariales (D2 R1) ===
+
+  it('tasa "NaN" lanza Error (no numérica)', () => {
+    const pairs = [
+      { par: 'USD/ARS', tasa: 'NaN' },
+      { par: 'USD/EUR', tasa: '0.9' },
+    ];
+    expect(() => crossRate('USD', 'ARS', pairs)).toThrow(
+      'crossRate: tasa no numérica para USD/ARS',
+    );
+  });
+
+  it('tasa "Infinity" lanza Error (no finita)', () => {
+    const pairs = [
+      { par: 'USD/ARS', tasa: 'Infinity' },
+      { par: 'USD/EUR', tasa: '0.9' },
+    ];
+    expect(() => crossRate('USD', 'ARS', pairs)).toThrow(
+      'crossRate: tasa no finita para USD/ARS',
+    );
+  });
+
+  it('par malformado "USD/ARS/EXTRA" lanza Error (más de 2 componentes)', () => {
+    const pairs = [
+      { par: 'USD/ARS/EXTRA', tasa: '1200' },
+      { par: 'USD/EUR', tasa: '0.9' },
+    ];
+    expect(() => crossRate('USD', 'ARS', pairs)).toThrow(
+      'crossRate: par malformado "USD/ARS/EXTRA" — se requieren exactamente 2 monedas separadas por \'/',
+    );
+  });
+
+  it('par sin USD lanza Error (ej. EUR/GBP)', () => {
+    const pairs = [
+      { par: 'EUR/GBP', tasa: '0.85' },
+    ];
+    expect(() => crossRate('EUR', 'GBP', pairs)).toThrow(
+      'crossRate: par "EUR/GBP" no contiene USD — se exige pivote USD',
+    );
+  });
+
   it('GBP → JPY con USD/GDP=1.27 y USD/JPY=148 => cruzada', () => {
     // USD/GBP = 1.27 (1 USD = 1.27 GBP)
     // USD/JPY = 148 (1 USD = 148 JPY)
