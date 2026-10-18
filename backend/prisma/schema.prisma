@@ -116,6 +116,21 @@ enum TramiteEstado {
   cancelado
 }
 
+enum TipoCuenta {
+  CAJA_AHORRO
+  CUENTA_CORRIENTE
+}
+
+enum TramoSentido {
+  ENTREGA
+  RETIRO
+}
+
+enum TramoCanal {
+  EFECTIVO
+  DEPOSITO
+}
+
 // =============================================================
 // USUARIOS / ROLES (de mesa-demo)
 // =============================================================
@@ -249,6 +264,13 @@ model CuentaCliente {
   numero    String
   titular   String?
   activo    Boolean @default(true)
+
+  tipoCuenta   TipoCuenta?
+  numeroCuenta String?
+  cbu          String?
+  alias        String?
+  cuitTitular  String?
+  tramos       EticketTramo[]
 
   @@unique([clienteId, numero])
   @@map("cuenta_cliente")
@@ -679,6 +701,7 @@ model Eticket {
 
   operationId     String?    @unique
   operation       Operacion? @relation(fields: [operationId], references: [id])
+  tramos          EticketTramo[]
 
   clienteId String
   cliente   Cliente @relation(fields: [clienteId], references: [id])
@@ -720,6 +743,30 @@ model Eticket {
 // =============================================================
 // TRÁMITES (nuevo — e-tickets internos de oficina)
 // =============================================================
+
+model EticketTramo {
+  id              String        @id @default(cuid())
+  eticketId       String
+  eticket         Eticket       @relation(fields: [eticketId], references: [id], onDelete: Cascade)
+  orden           Int
+  sentido         TramoSentido
+  canal           TramoCanal
+  moneda          Moneda
+  monto           Decimal       @db.Decimal(18, 4)
+  cuentaDestinoId String?
+  cuentaDestino   CuentaCliente? @relation(fields: [cuentaDestinoId], references: [id])
+  depBeneficiario String?
+  depCuit         String?
+  depBanco        String?
+  depNumeroCuenta String?
+  depCbu          String?
+  depAlias        String?
+  depTipoCuenta   TipoCuenta?
+
+  @@unique([eticketId, orden])
+  @@index([eticketId])
+  @@map("eticket_tramo")
+}
 
 model Tramite {
   id              String        @id @default(cuid())
