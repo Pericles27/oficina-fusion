@@ -420,9 +420,26 @@ function operationFromApi(o: ApiOperacion, pares: Par[], clientes: Cliente[], ex
    Contexto
    ============================================================= */
 
+/** Payload de ADD_OP — el cliente puede venir como nombre visible (texto)
+    o como FK (clienteId), o ambos. B1: si el nombre existe pero el ID no,
+    se rechaza antes de POST para no perder el cliente silenciosamente. */
+export interface AddOpPayload {
+  tipo: Tipo;
+  par: string;
+  monto: string | number;
+  cotiz?: string | number;
+  cobertura?: CoberturaTipo;
+  clienteId?: string;
+  /** Nombre visible del cliente (texto libre). Si viene, clienteId es obligatorio. */
+  cliente?: string;
+  operadorId?: string;
+}
+
 interface CajaContextType {
   state: CajaState;
-  dispatch: (action: any) => void;
+  /** Dispatch de acciones del caja-store. Usar las interfaces exportadas
+      (AddOpPayload) para los payloads; el resto se tipa por estructura. */
+  dispatch: (action: Record<string, unknown>) => void;
   /** Agregados, opcionales de consumir — no cambian el contrato existente. */
   loading: boolean;
   error: string | null;
@@ -543,7 +560,19 @@ export function CajaProvider({ children }: { children: ReactNode }) {
               return;
 
             case 'ADD_OP': {
-              const p = action.payload;
+              const p = action.payload as AddOpPayload;
+
+              // B1: si el payload trae nombre de cliente (texto) pero no
+              // clienteId (FK), NO se llama POST — el cliente se perdería
+              // silenciosamente. Se expone un error visible en el store.
+              if (p.cliente && !p.clienteId) {
+                setError(
+                  'No se puede crear una operación sin clienteId. ' +
+                    'El campo "cliente" (texto) no reemplaza la relación FK.',
+                );
+                return;
+              }
+
               await api.post('/operations', {
                 tipo: p.tipo,
                 parId: p.par,
@@ -555,7 +584,8 @@ export function CajaProvider({ children }: { children: ReactNode }) {
               await refetchOperaciones();
               await refetchKpis();
               if (p.operadorId) {
-                setState((prev) => ({ ...prev, lastOperadorId: p.operadorId }));
+                const operadorId = p.operadorId;
+                setState((prev) => ({ ...prev, lastOperadorId: operadorId }));
               }
               return;
             }
