@@ -1,5 +1,5 @@
 // =============================================================
-// Aggregators by Par — agrupación por par (USD/ARS, EUR/ARS, etc.)
+// Aggregators by Par — agrupación por par (USD/ARS, USD/BRL, etc.)
 //
 // Business invariant: dinero siempre como texto decimal canónico.
 // TODOS los cálculos usan decimal.js con precision 40, HALF_UP.
