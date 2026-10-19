@@ -8,7 +8,6 @@ import { useAuth } from '@/lib/auth-context';
 
 const nav: NavEntry[] = [
   { label: 'Dashboard', short: 'Inicio', href: '/cadete', icon: LayoutDashboard },
-  { label: 'Operaciones', short: 'Ops', href: '/cadete/operations', icon: ArrowRightLeft },
   { label: 'E-Tickets', short: 'Tickets', href: '/cadete/tickets', icon: FileText },
   { label: 'Mi Perfil', short: 'Perfil', href: '/cadete/profile', icon: User },
 ];
