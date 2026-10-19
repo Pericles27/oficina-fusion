@@ -47,7 +47,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   if (res.status === 401 && !skipAuthRedirect) {
     clearToken();
-    if (typeof window !== 'undefined') {
+    // Ya en /login, redirigir recargaría la página en bucle.
+    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
       window.location.href = '/login';
     }
     throw new ApiError(401, 'No autenticado', null);

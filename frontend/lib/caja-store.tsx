@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import { api, ApiError } from './api';
+import { useAuth } from './auth-context';
 
 /* =============================================================
    Tipos
@@ -490,9 +491,20 @@ export function CajaProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Carga inicial
+  // Carga inicial: sólo con sesión. Sin usuario (p. ej. en /login) cada
+  // request daría 401 y el cliente HTTP redirigiría a /login en bucle. Se
+  // repite al cambiar de usuario, así el login no deja la mesa vacía.
+  const { user } = useAuth();
+  const userId = user?.id;
   useEffect(() => {
+    if (!userId) {
+      setState(EMPTY_STATE);
+      setLoading(false);
+      return;
+    }
     let cancelado = false;
+    setLoading(true);
+    setError(null);
     (async () => {
       try {
         const [paresRes, clientesRes, opsRes] = await Promise.all([
@@ -551,7 +563,7 @@ export function CajaProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelado = true;
     };
-  }, [refetchKpis]);
+  }, [refetchKpis, userId]);
 
   const dispatch = useCallback(
     (action: any) => {
