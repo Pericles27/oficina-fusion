@@ -99,7 +99,7 @@ describe('F5 — e-tickets, scope de CADETE vía token (bolsa común)', () => {
     const cliente = await createTestCliente();
     const cuenta = await testPrisma.cuentaCliente.create({ data: {
       clienteId: cliente.id, banco: 'Banco sintético', numero: 'syn-001', titular: 'Titular sintético',
-      cuitTitular: '20123456789', tipoCuenta: 'CAJA_AHORRO', numeroCuenta: '000111',
+      cuitTitular: '20123456789', tipoCuenta: 'CAJA_AHORRO', monedaCuenta: 'ARS', numeroCuenta: '000111',
       cbu: '1234567890123456789012', alias: 'sintetico.alias',
     } });
     const created = await request(app.getHttpServer())
@@ -126,6 +126,7 @@ describe('F5 — e-tickets, scope de CADETE vía token (bolsa común)', () => {
       .toEqual([['RETIRO', 'USD', '1000'], ['ENTREGA', 'ARS', '1250000.5']]);
     expect(res.body.tramos[1].depNumeroCuenta).toBe('000111');
     expect(res.body.tramos[1].depTipoCuenta).toBe('CAJA_AHORRO');
+    expect(res.body.tramos[1].depMonedaCuenta).toBe('ARS');
     expect(JSON.stringify(res.body)).not.toMatch(
       /cotiz|clientRate|marketRate|puntos|comision|spread|ganancia|operadorDueno|saldo|montoEntregar|montoRecibir|"operation"/i,
     );

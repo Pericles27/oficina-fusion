@@ -106,6 +106,15 @@ describe('C1 schema on exclusive synthetic PostgreSQL', () => {
       assertSql(`(SELECT count(*) = 4 FROM eticket_tramo WHERE "eticketId" = 'c1-ticket')`));
   });
 
+  it('U3-bis: account and snapshot currency only ARS or USD', () => {
+    sql(violation(`UPDATE cuenta_cliente SET "monedaCuenta" = 'EUR' WHERE id = 'c1-account';`,
+      '23514', 'cuenta_cliente_moneda_ars_usd') +
+      violation(tramo({ canal: "'DEPOSITO'", cuentaDestinoId: "'c1-account'", depAlias: "'synthetic.alias'",
+        depMonedaCuenta: "'EUR'" }), '23514', 'eticket_tramo_dep_moneda_ars_usd') +
+      `UPDATE cuenta_cliente SET "monedaCuenta" = 'USD' WHERE id = 'c1-account';` +
+      assertSql(`(SELECT "monedaCuenta" = 'USD' FROM cuenta_cliente WHERE id = 'c1-account')`));
+  });
+
   it('permits DEPOSITO/RETIRO without identifiers (U6 is not a DB rule)', () => {
     sql(tramo({ canal: "'DEPOSITO'", sentido: "'RETIRO'" }) +
       assertSql(`(SELECT count(*) = 1 FROM eticket_tramo)`));
@@ -126,10 +135,13 @@ describe('C1 schema on exclusive synthetic PostgreSQL', () => {
         AND column_name IN ('tipoCuenta','numeroCuenta','cbu','alias','cuitTitular'))`) +
       assertSql(`(SELECT count(*) = 1 AND bool_and(udt_name = 'Moneda' AND is_nullable = 'NO')
         FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'eticket_tramo' AND column_name = 'moneda')`) +
-      assertSql(`NOT EXISTS (SELECT FROM information_schema.columns WHERE table_schema = 'public'
-        AND table_name IN ('eticket','cuenta_cliente','eticket_tramo') AND column_name IN ('monedaCuenta','depMonedaCuenta'))`) +
+      // U3-bis respondida (2026-10-19): moneda de la cuenta ARS/USD, copia en el tramo.
+      assertSql(`(SELECT count(*) = 2 AND bool_and(udt_name = 'Moneda') FROM information_schema.columns
+        WHERE table_schema = 'public' AND ((table_name = 'cuenta_cliente' AND column_name = 'monedaCuenta')
+        OR (table_name = 'eticket_tramo' AND column_name = 'depMonedaCuenta')))`) +
+      assertSql(`EXISTS (SELECT FROM pg_constraint WHERE conname = 'cuenta_cliente_moneda_ars_usd' AND contype = 'c')`) +
       assertSql(`NOT EXISTS (SELECT FROM pg_constraint WHERE conrelid = 'eticket'::regclass AND contype = 'c')`) +
-      assertSql(`(SELECT count(*) = 4 FROM pg_constraint WHERE conrelid = 'eticket_tramo'::regclass AND contype = 'c')`) +
+      assertSql(`(SELECT count(*) = 5 FROM pg_constraint WHERE conrelid = 'eticket_tramo'::regclass AND contype = 'c')`) +
       assertSql(`(SELECT count(*) = 1 FROM pg_constraint WHERE conrelid = 'eticket'::regclass
         AND conname = 'eticket_operationId_fkey' AND confrelid = 'operacion'::regclass AND contype = 'f')`) +
       assertSql(`EXISTS (SELECT FROM pg_index WHERE indexrelid = '"eticket_operationId_key"'::regclass AND indisunique)`) +

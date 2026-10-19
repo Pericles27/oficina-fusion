@@ -115,7 +115,7 @@ describe('ETicketsService — F5 fuga de datos económicos al cadete', () => {
       // U5: tramos con montos y cuenta de depósito, sin FK ni datos de la operación.
       expect(Object.keys(call.select.tramos.select).sort()).toEqual([
         'canal', 'depAlias', 'depBanco', 'depBeneficiario', 'depCbu', 'depCuit',
-        'depNumeroCuenta', 'depTipoCuenta', 'moneda', 'monto', 'orden', 'sentido',
+        'depMonedaCuenta', 'depNumeroCuenta', 'depTipoCuenta', 'moneda', 'monto', 'orden', 'sentido',
       ]);
       expect(call.select.banco).toBeUndefined();
       expect(call.select.cuentaDeposito).toBeUndefined();

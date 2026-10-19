@@ -266,6 +266,7 @@ model CuentaCliente {
   activo    Boolean @default(true)
 
   tipoCuenta   TipoCuenta?
+  monedaCuenta Moneda? // U3-bis: ARS o USD; obligatoria en la API, NULL sólo en filas previas
   numeroCuenta String?
   cbu          String?
   alias        String?
@@ -762,6 +763,7 @@ model EticketTramo {
   depCbu          String?
   depAlias        String?
   depTipoCuenta   TipoCuenta?
+  depMonedaCuenta Moneda?
 
   @@unique([eticketId, orden])
   @@index([eticketId])

@@ -38,7 +38,7 @@ const ETICKET_CADETE_SELECT = {
     orderBy: { orden: 'asc' },
     select: {
       orden: true, sentido: true, canal: true, moneda: true, monto: true,
-      depBeneficiario: true, depCuit: true, depBanco: true, depTipoCuenta: true,
+      depBeneficiario: true, depCuit: true, depBanco: true, depTipoCuenta: true, depMonedaCuenta: true,
       depNumeroCuenta: true, depCbu: true, depAlias: true,
     },
   },
@@ -55,7 +55,7 @@ const ETICKET_ADMIN_SELECT = {
 
 const emptySnapshot = {
   depBeneficiario: null, depCuit: null, depBanco: null, depNumeroCuenta: null,
-  depCbu: null, depAlias: null, depTipoCuenta: null,
+  depCbu: null, depAlias: null, depTipoCuenta: null, depMonedaCuenta: null,
 };
 
 @Injectable()
@@ -120,14 +120,16 @@ export class ETicketsService {
         const preserve = old?.canal === 'DEPOSITO' && old.cuentaDestinoId === cuentaId;
         const cuenta = await tx.cuentaCliente.findUnique({ where: { id: cuentaId }, select: {
           clienteId: true, titular: !preserve, cuitTitular: !preserve, banco: !preserve,
-          numeroCuenta: !preserve, cbu: !preserve, alias: !preserve, tipoCuenta: !preserve,
+          numeroCuenta: !preserve, cbu: !preserve, alias: !preserve, tipoCuenta: !preserve, monedaCuenta: !preserve,
         } });
         if (!cuenta || cuenta.clienteId !== clienteId) throw new BadRequestException('Cuenta de otro cliente o inexistente');
         const snapshot = preserve
           ? { depBeneficiario: old.depBeneficiario, depCuit: old.depCuit, depBanco: old.depBanco,
-              depNumeroCuenta: old.depNumeroCuenta, depCbu: old.depCbu, depAlias: old.depAlias, depTipoCuenta: old.depTipoCuenta }
+              depNumeroCuenta: old.depNumeroCuenta, depCbu: old.depCbu, depAlias: old.depAlias, depTipoCuenta: old.depTipoCuenta,
+              depMonedaCuenta: old.depMonedaCuenta }
           : { depBeneficiario: cuenta.titular, depCuit: cuenta.cuitTitular, depBanco: cuenta.banco,
-              depNumeroCuenta: cuenta.numeroCuenta, depCbu: cuenta.cbu, depAlias: cuenta.alias, depTipoCuenta: cuenta.tipoCuenta };
+              depNumeroCuenta: cuenta.numeroCuenta, depCbu: cuenta.cbu, depAlias: cuenta.alias, depTipoCuenta: cuenta.tipoCuenta,
+              depMonedaCuenta: cuenta.monedaCuenta };
         const combined = { ...snapshot, ...input.depOverrides };
         if (combined.depCbu !== null && !/^[0-9]{22}$/.test(combined.depCbu)) throw new BadRequestException('CBU debe tener 22 dígitos');
         if (![combined.depCbu, combined.depNumeroCuenta, combined.depAlias].some((v) => v?.trim())) {

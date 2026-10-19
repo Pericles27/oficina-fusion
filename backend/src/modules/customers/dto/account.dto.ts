@@ -7,6 +7,8 @@ export const createAccountSchema = z.object({
   titular: z.string().optional(),
   activo: z.boolean().optional(),
   tipoCuenta: z.enum(['CAJA_AHORRO', 'CUENTA_CORRIENTE']).optional().nullable(),
+  // U3-bis: moneda de la cuenta obligatoria, sólo ARS o USD.
+  monedaCuenta: z.enum(['ARS', 'USD']),
   numeroCuenta: z.string().optional().nullable(),
   cbu: z.string().min(1, 'cbu debe tener exactamente 22 dígitos').regex(/^[0-9]{22}$/, 'cbu debe tener exactamente 22 dígitos numéricos').optional().nullable(),
   alias: z.string().optional().nullable(),
@@ -22,6 +24,7 @@ export const updateAccountSchema = z.object({
   titular: z.string().optional(),
   activo: z.boolean().optional(),
   tipoCuenta: z.enum(['CAJA_AHORRO', 'CUENTA_CORRIENTE']).optional().nullable(),
+  monedaCuenta: z.enum(['ARS', 'USD']).optional(),
   numeroCuenta: z.string().optional().nullable(),
   cbu: z.string().min(1, 'cbu debe tener exactamente 22 dígitos').regex(/^[0-9]{22}$/, 'cbu debe tener exactamente 22 dígitos numéricos').optional().nullable(),
   alias: z.string().optional().nullable(),

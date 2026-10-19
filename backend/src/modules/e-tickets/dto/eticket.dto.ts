@@ -15,6 +15,7 @@ export const DepOverrideSchema = z.object({
   depCbu: z.string().regex(/^[0-9]{22}$/, 'CBU debe tener 22 dígitos').nullable().optional(),
   depAlias: z.string().nullable().optional(),
   depTipoCuenta: TipoCuentaSchema.nullable().optional(),
+  depMonedaCuenta: z.enum(['ARS', 'USD']).nullable().optional(),
 }).strict();
 export type DepOverride = z.infer<typeof DepOverrideSchema>;
 

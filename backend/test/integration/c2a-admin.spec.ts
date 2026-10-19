@@ -40,16 +40,16 @@ function assertSafeSnapshot() {
 }
 assertSafeSnapshot();
 
-const depKeys = ['depBeneficiario', 'depCuit', 'depBanco', 'depNumeroCuenta', 'depCbu', 'depAlias', 'depTipoCuenta'] as const;
+const depKeys = ['depBeneficiario', 'depCuit', 'depBanco', 'depNumeroCuenta', 'depCbu', 'depAlias', 'depTipoCuenta', 'depMonedaCuenta'] as const;
 const legacyKeys = ['banco', 'cuentaDeposito', 'monedaEntregar', 'montoEntregar', 'monedaRecibir', 'montoRecibir'];
 // U5 (2026-10-16): el cadete ve los tramos (cuánto deja/se lleva y a qué cuenta); las columnas legado salen.
 const cadeteKeys = ['id', 'numero', 'codigo', 'ts', 'estado', 'clienteId', 'metodoEntrega', 'direccionEntrega', 'telefonoContacto', 'nombreRecibe', 'horarioEntrega', 'instrucciones', 'confirmadoPor', 'confirmadoEn', 'creadoEn', 'tramos'].sort();
-const cadeteTramoKeys = ['orden', 'sentido', 'canal', 'moneda', 'monto', 'depBeneficiario', 'depCuit', 'depBanco', 'depTipoCuenta', 'depNumeroCuenta', 'depCbu', 'depAlias'].sort();
+const cadeteTramoKeys = ['orden', 'sentido', 'canal', 'moneda', 'monto', 'depBeneficiario', 'depCuit', 'depBanco', 'depTipoCuenta', 'depMonedaCuenta', 'depNumeroCuenta', 'depCbu', 'depAlias'].sort();
 const forbiddenForCadete = /cotiz|clientRate|marketRate|puntos|comision|spread|ganancia|operadorDueno|saldo|montoEntregar|montoRecibir|"operation"|cuentaDestinoId/i;
-const masterA = { titular: 'Titular sintético A', cuitTitular: '20123456789', banco: 'Banco sintético A', tipoCuenta: 'CAJA_AHORRO' as const, numeroCuenta: '000111', cbu: '1234567890123456789012', alias: 'sintetico.a' };
-const masterB = { titular: 'Titular sintético B', cuitTitular: '20987654321', banco: 'Banco sintético B', tipoCuenta: 'CUENTA_CORRIENTE' as const, numeroCuenta: '000222', cbu: '2234567890123456789012', alias: 'sintetico.b' };
-const snapshotA = { depBeneficiario: masterA.titular, depCuit: masterA.cuitTitular, depBanco: masterA.banco, depTipoCuenta: masterA.tipoCuenta, depNumeroCuenta: masterA.numeroCuenta, depCbu: masterA.cbu, depAlias: masterA.alias };
-const snapshotB = { depBeneficiario: masterB.titular, depCuit: masterB.cuitTitular, depBanco: masterB.banco, depTipoCuenta: masterB.tipoCuenta, depNumeroCuenta: masterB.numeroCuenta, depCbu: masterB.cbu, depAlias: masterB.alias };
+const masterA = { titular: 'Titular sintético A', cuitTitular: '20123456789', banco: 'Banco sintético A', tipoCuenta: 'CAJA_AHORRO' as const, monedaCuenta: 'ARS' as const, numeroCuenta: '000111', cbu: '1234567890123456789012', alias: 'sintetico.a' };
+const masterB = { titular: 'Titular sintético B', cuitTitular: '20987654321', banco: 'Banco sintético B', tipoCuenta: 'CUENTA_CORRIENTE' as const, monedaCuenta: 'USD' as const, numeroCuenta: '000222', cbu: '2234567890123456789012', alias: 'sintetico.b' };
+const snapshotA = { depBeneficiario: masterA.titular, depCuit: masterA.cuitTitular, depBanco: masterA.banco, depTipoCuenta: masterA.tipoCuenta, depMonedaCuenta: masterA.monedaCuenta, depNumeroCuenta: masterA.numeroCuenta, depCbu: masterA.cbu, depAlias: masterA.alias };
+const snapshotB = { depBeneficiario: masterB.titular, depCuit: masterB.cuitTitular, depBanco: masterB.banco, depTipoCuenta: masterB.tipoCuenta, depMonedaCuenta: masterB.monedaCuenta, depNumeroCuenta: masterB.numeroCuenta, depCbu: masterB.cbu, depAlias: masterB.alias };
 const json = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 
 describe.sequential('C2a — real Nest HTTP, real service, real PostgreSQL SELECT', () => {
