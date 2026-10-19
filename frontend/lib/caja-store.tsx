@@ -589,8 +589,8 @@ export function CajaProvider({ children }: { children: ReactNode }) {
               // silenciosamente. Se expone un error visible en el store.
               if (p.cliente && !p.clienteId) {
                 setError(
-                  'No se puede crear una operación sin clienteId. ' +
-                    'El campo "cliente" (texto) no reemplaza la relación FK.',
+                  `«${p.cliente}» no es un cliente cargado: elegilo de la lista o crealo. ` +
+                    'Una operación sin clienteId perdería el cliente.',
                 );
                 return;
               }
@@ -617,8 +617,14 @@ export function CajaProvider({ children }: { children: ReactNode }) {
               return;
             }
 
+            case 'ADD_CLIENTE':
+              // B3: cliente recién creado desde la planilla (ya persistido con POST /customers).
+              setState((prev) => ({ ...prev, clientes: [action.cliente, ...prev.clientes] }));
+              return;
+
             case 'EDIT_OP': {
               const patch: Record<string, unknown> = {};
+              if ('clienteId' in action.patch) patch.clienteId = action.patch.clienteId;
               if ('monto' in action.patch) patch.monto = String(action.patch.monto);
               if ('cotiz' in action.patch) patch.cotiz = String(action.patch.cotiz);
               if ('cobertura' in action.patch) patch.cobertura = action.patch.cobertura;

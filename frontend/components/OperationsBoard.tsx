@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { Check, X, Plus, Paperclip, AlertTriangle } from 'lucide-react';
 import { ETicketPanel } from '@/components/ETicketPanel';
+import { ClientePicker, type ClienteElegido } from '@/components/ClientePicker';
 import {
   useCaja,
   statsForPar,
@@ -82,9 +83,11 @@ function OpRow({ o, parDef, onOpen, isOpen }: {
   const { dispatch } = useCaja();
   const [editing, setEditing] = useState<null | 'cliente' | 'monto' | 'cotiz'>(null);
   const [draft, setDraft] = useState('');
+  const [clienteDraft, setClienteDraft] = useState<ClienteElegido>({ id: null, nombre: '' });
 
   const startEdit = (field: 'cliente' | 'monto' | 'cotiz') => {
     setEditing(field);
+    if (field === 'cliente') setClienteDraft({ id: o.clienteId ?? null, nombre: o.cliente });
     setDraft(
       field === 'cliente' ? o.cliente
       : field === 'monto' ? String(o.monto)
@@ -95,7 +98,10 @@ function OpRow({ o, parDef, onOpen, isOpen }: {
   const commit = () => {
     if (!editing) return;
     if (editing === 'cliente') {
-      dispatch({ type: 'EDIT_OP', id: o.id, patch: { cliente: draft } });
+      // B3: sólo se guarda un cliente resuelto (FK); un texto suelto no persiste.
+      if (clienteDraft.id && clienteDraft.id !== o.clienteId) {
+        dispatch({ type: 'EDIT_OP', id: o.id, patch: { clienteId: clienteDraft.id } });
+      }
     } else {
       const n = parseFloat(draft.replace(',', '.'));
       if (n > 0) dispatch({ type: 'EDIT_OP', id: o.id, patch: { [editing]: n } });
@@ -140,7 +146,14 @@ function OpRow({ o, parDef, onOpen, isOpen }: {
     >
       {/* Cliente — en mobile lleva un punto de estado adelante */}
       {editing === 'cliente'
-        ? <td>{cellInput('left')}</td>
+        ? <td onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); commit(); }
+                if (e.key === 'Escape') setEditing(null);
+              }}
+              onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setTimeout(commit, 150); }}>
+            <ClientePicker value={clienteDraft} onChange={setClienteDraft} autoFocus />
+          </td>
         : <td {...editableProps('cliente')}>
             <span className="flex items-center gap-1.5">
               <span className="status-dot sm:hidden" data-status={o.status}
@@ -217,7 +230,7 @@ function BlotterTable({
   const { state, dispatch } = useCaja();
   const isBuy = tipo === 'C';
 
-  const [cliente, setCliente] = useState('');
+  const [cliente, setCliente] = useState<ClienteElegido>({ id: null, nombre: '' });
   const [monto, setMonto] = useState('');
   const [cotiz, setCotiz] = useState('');
 
@@ -246,19 +259,20 @@ function BlotterTable({
         par: parDef.par,
         monto: montoNum,
         cotiz: cotizNum,
-        cliente: cliente.trim(),
+        cliente: cliente.nombre.trim(),
+        clienteId: cliente.id ?? undefined,
         // Cobertura y operador toman el default; se ajustan en el e-ticket
         cobertura: 'efectivo',
         operadorId: state.lastOperadorId || state.traders[0]?.id || '',
       },
     });
-    setCliente(''); setMonto(''); setCotiz('');
+    setCliente({ id: null, nombre: '' }); setMonto(''); setCotiz('');
     setTimeout(() => clienteRef.current?.focus(), 0);
   }, [dispatch, tipo, parDef.par, montoNum, cotizNum, cliente, state.lastOperadorId, state.traders]);
 
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Enter') { e.preventDefault(); commit(); }
-    if (e.key === 'Escape') { setCliente(''); setMonto(''); setCotiz(''); }
+    if (e.key === 'Escape') { setCliente({ id: null, nombre: '' }); setMonto(''); setCotiz(''); }
   };
 
   return (
@@ -303,12 +317,7 @@ function BlotterTable({
             {/* Carga rápida: Enter confirma */}
             <tr className="blotter-new">
               <td>
-                <input ref={clienteRef} className="input-inline input-inline-text"
-                       placeholder="cliente" value={cliente}
-                       onChange={(e) => setCliente(e.target.value)} list="clientes-list" />
-                <datalist id="clientes-list">
-                  {state.clientes.map((c) => <option key={c.id} value={c.nombre} />)}
-                </datalist>
+                <ClientePicker inputRef={clienteRef} value={cliente} onChange={setCliente} />
               </td>
               <td className="num">
                 <input className="input-inline" placeholder={`monto ${parDef.base}`}
