@@ -8,7 +8,7 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
-import { Check, X, Plus, Paperclip, AlertTriangle } from 'lucide-react';
+import { Check, X, Plus, AlertTriangle } from 'lucide-react';
 import { ETicketPanel } from '@/components/ETicketPanel';
 import { ClientePicker, type ClienteElegido } from '@/components/ClientePicker';
 import {
@@ -16,7 +16,6 @@ import {
   statsForPar,
   posicionRealizada,
   posicionAbierta,
-  resumenTicket,
   OP_STATUS_LABEL,
   type Operation,
   type Par,
@@ -50,23 +49,6 @@ function Total({ value, digits }: { value: number | string; digits: number }) {
 }
 
 const quoteDigits = (p: Par) => (p.quote === 'ARS' ? 0 : 2);
-
-/** Indicador del avance del e-ticket en la fila: tramos confirmados. */
-function op_patas_pill(o: Operation) {
-  if (o.patas.length === 0) return null;
-  const r = resumenTicket(o);
-  return (
-    <span className="dep-pill shrink-0" data-complete={String(r.completo)}
-          title={r.incompletas > 0
-            ? `Faltan datos en ${r.incompletas} tramo(s)`
-            : `${r.confirmadas}/${r.total} tramos confirmados`}>
-      {r.incompletas > 0
-        ? <AlertTriangle className="w-2.5 h-2.5" />
-        : <Paperclip className="w-2.5 h-2.5" />}
-      {r.confirmadas}/{r.total}
-    </span>
-  );
-}
 
 /* =============================================================
    Fila de operación — sólo Cliente / Monto / TC / Total.
@@ -161,8 +143,6 @@ function OpRow({ o, parDef, onOpen, isOpen }: {
               <span className="truncate">
                 {o.cliente || <span className="tone-muted">—</span>}
               </span>
-              {/* Avance del e-ticket: tramos confirmados */}
-              {op_patas_pill(o)}
             </span>
           </td>}
 
@@ -378,7 +358,7 @@ function BlotterTable({
    Panel completo — tabs por par + KPIs + ambos blotters
    ============================================================= */
 
-export function OperationsBoard({ role = 'admin' }: { role?: 'admin' | 'cadete' }) {
+export function OperationsBoard() {
   const { state, dispatch, error } = useCaja();
   const [par, setPar] = useState(state.pares[0]?.par ?? 'USD/ARS');
 
@@ -480,7 +460,6 @@ export function OperationsBoard({ role = 'admin' }: { role?: 'admin' | 'cadete' 
         <ETicketPanel
           op={opAbierta}
           parDef={parDef}
-          role={role}
           onClose={() => setOpenId(null)}
         />
       )}

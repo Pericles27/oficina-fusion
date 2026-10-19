@@ -73,81 +73,15 @@ export interface CuentaBancaria {
 }
 
 /* =============================================================
-   E-TICKET — modelo por tipo de operación
+   E-TICKET
    -------------------------------------------------------------
-   LIMITACIÓN CONOCIDA (reportada en el entregable de Fase 3):
-   el backend modela el e-ticket como una entidad PLANA (`Eticket`):
-   un método de entrega, un monto a entregar y uno a recibir. El
-   modelo de UI de abajo (dos "patas" con comprobante en dataURL,
-   estado propio por tramo, método por tramo) no tiene un endpoint
-   equivalente — no existe `POST /e-tickets/:id/patas` ni nada que
-   reciba un dataURL de comprobante.
-
-   Decisión tomada (bajo nivel, documentada para auditoría): las
-   PATAS siguen viviendo en memoria local del store, derivadas de
-   `Operation` al crearse (igual que antes), y las acciones que las
-   tocan (EDIT_PATA, SET_COMPROBANTE, CONFIRMAR_PATA,
-   SET_INSTRUCCIONES) actualizan sólo el estado local — NO llaman a
-   la API todavía. Esto significa que el detalle del e-ticket (quién
-   recibe, comprobante subido, etc.) NO sobrevive un F5 hoy. Persiste
-   sí: la operación en sí (monto, cotización, estado, cliente).
-
-   Para completar esto hace falta definir el contrato
-   POST/PUT /e-tickets con la forma de "dos tramos" — eso es una
-   decisión de modelo de datos que no me corresponde inventar en
-   silencio (igual que B2 del análisis del Arquitecto). Reportado.
+   Desde C4 el e-ticket vive en la API (una visita + N tramos,
+   `lib/etickets.ts`); ya no hay "patas" en memoria del navegador.
+   Acá sólo queda la sugerencia inicial de tramos según el tipo de
+   operación.
    ============================================================= */
 
 export type Direccion = 'entregamos' | 'recibimos';
-
-export type MetodoPata =
-  | 'efectivo'   // en mano: hace falta dirección, contacto y horario
-  | 'deposito'   // banco: hace falta cuenta destino + comprobante
-  | 'saldo';     // contra saldo del cliente: no hay movimiento físico
-
-export const METODO_LABEL: Record<MetodoPata, string> = {
-  efectivo: 'Efectivo en mano',
-  deposito: 'Depósito bancario',
-  saldo: 'Contra saldo',
-};
-
-export type PataEstado = 'pendiente' | 'hecho' | 'confirmado';
-
-export interface Comprobante {
-  nombre: string;
-  dataUrl: string;
-  subidoEl: string;
-}
-
-/**
- * Una pata del e-ticket. Los campos opcionales aplican según `metodo`:
- *  - efectivo → direccionEntrega, nombreRecibe, telefono, horario
- *  - deposito → cuentaId, banco, alias
- *  - saldo    → ninguno (se salda contra la cuenta corriente del cliente)
- */
-export interface Pata {
-  id: string;
-  direccion: Direccion;
-  moneda: string;
-  /** F3: string decimal canónico. */
-  monto: string;
-  metodo: MetodoPata;
-
-  // efectivo en mano
-  direccionEntrega?: string;
-  nombreRecibe?: string;
-  telefono?: string;
-  horario?: string;
-
-  // depósito bancario
-  cuentaId?: string | null;
-  banco?: string;
-  alias?: string;
-
-  nota: string;
-  estado: PataEstado;
-  comprobante?: Comprobante | null;
-}
 
 /** Qué entrega y qué recibe la caja, según el tipo de operación. */
 export function patasDe(o: { tipo: Tipo; monto: string; contra: string }, par: Par) {
@@ -160,43 +94,6 @@ export function patasDe(o: { tipo: Tipo; monto: string; contra: string }, par: P
         entregamos: { moneda: par.base, monto: o.monto },
         recibimos: { moneda: par.quote, monto: o.contra },
       };
-}
-
-/** Método sugerido: ARS suele ir por banco, la divisa en mano. */
-function metodoSugerido(moneda: string, cobertura: CoberturaTipo): MetodoPata {
-  if (cobertura === 'saldo') return 'saldo';
-  return moneda === 'ARS' ? 'deposito' : 'efectivo';
-}
-
-/** Crea las dos patas iniciales de una operación. */
-export function crearPatas(
-  o: { tipo: Tipo; monto: string; contra: string; cobertura: CoberturaTipo },
-  par: Par,
-  cuenta?: CuentaBancaria
-): Pata[] {
-  const p = patasDe(o, par);
-
-  const build = (direccion: Direccion, moneda: string, monto: string): Pata => {
-    const metodo = metodoSugerido(moneda, o.cobertura);
-    return {
-      id: `${direccion}-${Math.random().toString(36).slice(2, 9)}`,
-      direccion,
-      moneda,
-      monto,
-      metodo,
-      nota: '',
-      estado: metodo === 'saldo' ? 'confirmado' : 'pendiente',
-      comprobante: null,
-      ...(metodo === 'deposito' && cuenta?.moneda === moneda
-        ? { cuentaId: cuenta.id, banco: cuenta.banco, alias: cuenta.alias }
-        : {}),
-    };
-  };
-
-  return [
-    build('entregamos', p.entregamos.moneda, p.entregamos.monto),
-    build('recibimos', p.recibimos.moneda, p.recibimos.monto),
-  ];
 }
 
 export interface Operation {
@@ -216,10 +113,6 @@ export interface Operation {
   clienteId: string | null;
   cliente: string;
   notas: string | null;
-  /** Las dos patas del e-ticket (entregamos / recibimos) — ver nota arriba: viven sólo en memoria local. */
-  patas: Pata[];
-  /** Instrucciones generales para el cadete — también sólo en memoria local por ahora. */
-  instrucciones: string;
 }
 
 /**
@@ -364,47 +257,14 @@ function clienteFromApi(c: ApiCliente): Cliente {
   };
 }
 
-/** Convierte una Operacion de la API al shape de UI, generando patas en memoria. */
-function operationFromApi(o: ApiOperacion, pares: Par[], clientes: Cliente[], existing?: Operation): Operation {
-  const parDef = pares.find((p) => p.par === o.parId) ?? pares[0];
+/** Convierte una Operacion de la API al shape de UI. */
+function operationFromApi(o: ApiOperacion, clientes: Cliente[]): Operation {
   const cli = o.clienteId ? clientes.find((c) => c.id === o.clienteId) : undefined;
   const nombreCliente = o.cliente
     ? o.cliente.apellido
       ? `${o.cliente.nombre} ${o.cliente.apellido}`
       : o.cliente.nombre
     : cli?.nombre ?? '';
-
-  // Si ya teníamos esta operación en memoria, conservamos sus patas e
-  // instrucciones (viven sólo local, ver nota de limitación arriba) en
-  // vez de regenerarlas en cada refetch — si no, se perdería lo que el
-  // cadete/admin cargó a mano en la sesión actual.
-  if (existing && existing.id === o.id) {
-    return {
-      ...existing,
-      codigo: o.codigo,
-      ts: o.ts,
-      hora: hhmm(o.ts),
-      tipo: o.tipo,
-      par: o.parId,
-      monto: o.monto,
-      cotiz: o.cotiz,
-      contra: o.contra,
-      cobertura: o.cobertura,
-      status: STATUS_FROM_API[o.status] ?? 'pendiente',
-      operadorId: o.operadorId,
-      clienteId: o.clienteId,
-      cliente: nombreCliente,
-      notas: o.notas,
-    };
-  }
-
-  const patas = parDef
-    ? crearPatas(
-        { tipo: o.tipo, monto: o.monto, contra: o.contra, cobertura: o.cobertura },
-        parDef,
-        cli?.cuentas?.[0]
-      )
-    : [];
 
   return {
     id: o.id,
@@ -422,8 +282,6 @@ function operationFromApi(o: ApiOperacion, pares: Par[], clientes: Cliente[], ex
     clienteId: o.clienteId,
     cliente: nombreCliente,
     notas: o.notas,
-    patas,
-    instrucciones: '',
   };
 }
 
@@ -474,7 +332,7 @@ export function CajaProvider({ children }: { children: ReactNode }) {
       ...prev,
       operaciones: res.data
         .filter((o) => o.status !== 'cancelada')
-        .map((o) => operationFromApi(o, prev.pares, prev.clientes, prev.operaciones.find((x) => x.id === o.id))),
+        .map((o) => operationFromApi(o, prev.clientes)),
     }));
   }, []);
 
@@ -491,11 +349,12 @@ export function CajaProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Carga inicial: sólo con sesión. Sin usuario (p. ej. en /login) cada
+  // Carga inicial: sólo con sesión de mesa. Sin usuario (p. ej. en /login) cada
   // request daría 401 y el cliente HTTP redirigiría a /login en bucle. Se
   // repite al cambiar de usuario, así el login no deja la mesa vacía.
+  // La mesa (operaciones, KPIs) es sólo de ADMIN/OPERADOR: un cadete recibiría 403.
   const { user } = useAuth();
-  const userId = user?.id;
+  const userId = user && user.roles.some((r) => r === 'ADMIN' || r === 'OPERADOR') ? user.id : undefined;
   useEffect(() => {
     if (!userId) {
       setState(EMPTY_STATE);
@@ -518,7 +377,7 @@ export function CajaProvider({ children }: { children: ReactNode }) {
         const clientes = clientesRes.data.map(clienteFromApi);
         const operaciones = opsRes.data
           .filter((o) => o.status !== 'cancelada')
-          .map((o) => operationFromApi(o, pares, clientes));
+          .map((o) => operationFromApi(o, clientes));
 
         // "traders": no hay GET /users para OPERADOR (ADMIN-only). El
         // nombre de cada operador viaja en la propia Operacion — se arma
@@ -694,92 +553,6 @@ export function CajaProvider({ children }: { children: ReactNode }) {
               return;
             }
 
-            /* ── Patas del e-ticket — sólo memoria local, ver nota de
-               limitación conocida al tope del archivo. No hay endpoint
-               de backend equivalente todavía. ── */
-
-            case 'EDIT_PATA': {
-              const mapPata = (p: Pata): Pata => {
-                if (p.id !== action.pataId) return p;
-                const next = { ...p, ...action.patch };
-
-                if (action.patch.metodo && action.patch.metodo !== p.metodo) {
-                  delete next.direccionEntrega;
-                  delete next.nombreRecibe;
-                  delete next.telefono;
-                  delete next.horario;
-                  delete next.cuentaId;
-                  delete next.banco;
-                  delete next.alias;
-                  if (action.patch.metodo === 'saldo') {
-                    next.estado = 'confirmado';
-                    next.comprobante = null;
-                  } else {
-                    next.estado = 'pendiente';
-                  }
-                }
-                return next;
-              };
-
-              setState((prev) => ({
-                ...prev,
-                operaciones: prev.operaciones.map((o) =>
-                  o.id === action.opId ? { ...o, patas: o.patas.map(mapPata) } : o
-                ),
-              }));
-              return;
-            }
-
-            case 'SET_COMPROBANTE': {
-              setState((prev) => ({
-                ...prev,
-                operaciones: prev.operaciones.map((o) =>
-                  o.id === action.opId
-                    ? {
-                        ...o,
-                        patas: o.patas.map((p) =>
-                          p.id === action.pataId
-                            ? {
-                                ...p,
-                                comprobante: action.comprobante,
-                                estado: (action.comprobante ? 'hecho' : 'pendiente') as PataEstado,
-                              }
-                            : p
-                        ),
-                      }
-                    : o
-                ),
-              }));
-              return;
-            }
-
-            case 'CONFIRMAR_PATA': {
-              setState((prev) => ({
-                ...prev,
-                operaciones: prev.operaciones.map((o) =>
-                  o.id === action.opId
-                    ? {
-                        ...o,
-                        patas: o.patas.map((p) =>
-                          p.id === action.pataId ? { ...p, estado: 'confirmado' as PataEstado } : p
-                        ),
-                      }
-                    : o
-                ),
-              }));
-              return;
-            }
-
-            case 'SET_INSTRUCCIONES': {
-              setState((prev) => ({
-                ...prev,
-                operaciones: prev.operaciones.map((o) =>
-                  o.id === action.opId ? { ...o, instrucciones: action.texto } : o
-                ),
-              }));
-              return;
-            }
-
             default:
               return;
           }
@@ -911,50 +684,4 @@ export function traderById(state: CajaState, id: string): Trader | undefined {
 
 export function clienteById(state: CajaState, id: string | null): Cliente | undefined {
   return id ? state.clientes.find((c) => c.id === id) : undefined;
-}
-
-/** Qué campos necesita cada método para considerarse completo. */
-export function camposFaltantes(p: Pata): string[] {
-  const falta: string[] = [];
-  if (p.metodo === 'efectivo') {
-    if (!p.direccionEntrega?.trim()) falta.push('dirección');
-    if (!p.nombreRecibe?.trim()) falta.push('quién recibe');
-    if (!p.telefono?.trim()) falta.push('teléfono');
-  }
-  if (p.metodo === 'deposito') {
-    if (!p.cuentaId && !p.banco?.trim()) falta.push('cuenta destino');
-  }
-  return falta;
-}
-
-export interface ResumenTicket {
-  /** Patas que el cadete todavía tiene que ejecutar */
-  pendientes: number;
-  /** Patas ya ejecutadas, esperando confirmación del admin */
-  hechas: number;
-  confirmadas: number;
-  total: number;
-  /** Patas a las que les falta algún dato para poder ejecutarse */
-  incompletas: number;
-  /** true si el e-ticket está listo para mandarse al cadete */
-  listoParaCadete: boolean;
-  /** true si todas las patas están confirmadas */
-  completo: boolean;
-}
-
-export function resumenTicket(o: Operation): ResumenTicket {
-  const incompletas = o.patas.filter((p) => camposFaltantes(p).length > 0).length;
-  const pendientes = o.patas.filter((p) => p.estado === 'pendiente').length;
-  const hechas = o.patas.filter((p) => p.estado === 'hecho').length;
-  const confirmadas = o.patas.filter((p) => p.estado === 'confirmado').length;
-
-  return {
-    pendientes,
-    hechas,
-    confirmadas,
-    total: o.patas.length,
-    incompletas,
-    listoParaCadete: incompletas === 0 && o.patas.length > 0,
-    completo: o.patas.length > 0 && confirmadas === o.patas.length,
-  };
 }

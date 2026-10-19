@@ -48,6 +48,7 @@ export class ETicketsController {
     @Req() req: Request & { user: { id: string; roles: RolUsuario[] } },
     @Query('estado') estado?: string,
     @Query('clienteId') clienteId?: string,
+    @Query('operationId') operationId?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
   ) {
@@ -57,6 +58,7 @@ export class ETicketsController {
     return this.eTicketsService.findAll({
       estado,
       clienteId,
+      operationId,
       page: page ? Number(page) : undefined,
       pageSize: pageSize ? Number(pageSize) : undefined,
       scopeCadete: esCadete,

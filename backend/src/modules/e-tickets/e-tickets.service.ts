@@ -164,6 +164,7 @@ export class ETicketsService {
   async findAll(params: {
     estado?: string;
     clienteId?: string;
+    operationId?: string;
     page?: number;
     pageSize?: number;
     scopeCadete?: boolean;
@@ -192,6 +193,7 @@ export class ETicketsService {
 
     if (params.estado) where.estado = params.estado as EticketEstado;
     if (params.clienteId) where.clienteId = params.clienteId;
+    if (params.operationId) where.operationId = params.operationId;
 
     const [data, total] = await Promise.all([
       this.prisma.eticket.findMany({

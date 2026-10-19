@@ -206,4 +206,22 @@ describe('F5 — e-tickets, scope de CADETE vía token (bolsa común)', () => {
       .set('Authorization', `Bearer ${cadeteToken}`)
       .expect(403);
   });
+
+  it('C4: ADMIN filtra por operationId; un CADETE no puede usar el filtro para salir de su alcance', async () => {
+    const adminToken = await loginAs('admin.c4.op', [RolUsuario.ADMIN]);
+    const par = await testPrisma.par.create({ data: { par: 'USD/ARS', base: 'USD', quote: 'ARS', nombre: 'Dólar / Peso', compra: '1000', venta: '1010', varPct: '0', decimals: 2 } });
+    const op = await request(app.getHttpServer()).post('/operations').set('Authorization', `Bearer ${adminToken}`)
+      .send({ tipo: 'C', parId: par.par, monto: '10', cobertura: 'efectivo' }).expect(201);
+    const conOp = await crearEticket(adminToken, { operationId: op.body.id });
+    await crearEticket(adminToken);
+
+    const res = await request(app.getHttpServer())
+      .get(`/e-tickets?operationId=${op.body.id}`).set('Authorization', `Bearer ${adminToken}`).expect(200);
+    expect(res.body.data.map((e: { id: string }) => e.id)).toEqual([conOp.id]);
+
+    const cadeteToken = await loginAs('cadete.c4.op', [RolUsuario.CADETE]);
+    const cadete = await request(app.getHttpServer())
+      .get(`/e-tickets?operationId=${op.body.id}`).set('Authorization', `Bearer ${cadeteToken}`).expect(200);
+    expect(cadete.body.total).toBe(2);
+  });
 });
