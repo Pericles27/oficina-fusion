@@ -37,7 +37,8 @@ describe('F6 — quotations', () => {
   describe('GET /quotations', () => {
     it('devuelve los pares con compra/venta', async () => {
       await createTestPar({ par: 'USD/ARS', compra: '1000.00', venta: '1010.00' });
-      await createTestPar({ par: 'EUR/ARS', base: 'EUR', compra: '1100.00', venta: '1110.00' });
+      // D1: todo par tiene USD de un lado (CHECK par_usd_pivote).
+      await createTestPar({ par: 'USD/EUR', base: 'USD', quote: 'EUR', compra: '0.90', venta: '0.92' });
       const token = await loginAs('operador.q.get', [RolUsuario.OPERADOR]);
 
       const res = await request(app.getHttpServer())
