@@ -221,17 +221,27 @@ export interface Operation {
   instrucciones: string;
 }
 
-/** KPI de un par, tal como lo devuelve GET /operations/kpis/par (aggregateByPar). */
+/**
+ * KPI de un par, tal como lo devuelve GET /operations/kpis/par (aggregateByPar, B2).
+ * Las cifras exactas vienen como string decimal; los number son sólo para mostrar.
+ */
 export interface KpiPar {
   par: string;
   totalCompras: number;
   totalVentas: number;
   compraPromedio: number;
   ventaPromedio: number;
-  spreadPromedio: number;
   volumenTotalUsd: number;
   nOps: number;
-  gananciaEstimadaUsd: number;
+  /** promVenta − promCompra, en quote por unidad de base. */
+  spread: string;
+  matchedBase: string;
+  /** Resultado por spread sobre el volumen calzado, en quote. */
+  realizedQuote: string;
+  spreadUsd: string;
+  comisionesUsd: string;
+  /** Ganancia = spread − comisiones, en USD (U1). */
+  gananciaUsd: string;
 }
 
 export interface KpiOperador {
@@ -806,10 +816,14 @@ const EMPTY_KPI_PAR: Omit<KpiPar, 'par'> = {
   totalVentas: 0,
   compraPromedio: 0,
   ventaPromedio: 0,
-  spreadPromedio: 0,
   volumenTotalUsd: 0,
   nOps: 0,
-  gananciaEstimadaUsd: 0,
+  spread: '0',
+  matchedBase: '0',
+  realizedQuote: '0',
+  spreadUsd: '0',
+  comisionesUsd: '0',
+  gananciaUsd: '0',
 };
 
 export function statsForPar(state: CajaState, par: string): ParStats {
@@ -830,7 +844,7 @@ export function statsForPar(state: CajaState, par: string): ParStats {
     baseVenta: kpi.totalVentas,
     promCompra: kpi.compraPromedio,
     promVenta: kpi.ventaPromedio,
-    spread: kpi.spreadPromedio,
+    spread: Number(kpi.spread),
     posicion: kpi.totalCompras - kpi.totalVentas,
   };
 }
@@ -846,8 +860,7 @@ export interface PosRealizada {
 export function posicionRealizada(state: CajaState, par: string): PosRealizada {
   const kpi = state.kpisPar.find((k) => k.par === par);
   if (!kpi) return { matchedBase: 0, realizedQuote: 0 };
-  const matchedBase = Math.min(kpi.totalCompras, kpi.totalVentas);
-  return { matchedBase, realizedQuote: kpi.gananciaEstimadaUsd };
+  return { matchedBase: Number(kpi.matchedBase), realizedQuote: Number(kpi.realizedQuote) };
 }
 
 export interface PosAbierta {

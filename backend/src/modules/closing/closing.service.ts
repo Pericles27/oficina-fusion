@@ -3,7 +3,7 @@ import { PrismaService } from '@common/prisma/prisma.service';
 import { CreateCierreDto } from './dto/closing.dto';
 import { Cierre } from '@prisma/client';
 import { Decimal } from 'decimal.js';
-import { aggregateByPar } from '../operations/aggregators';
+import { aggregateByPar, toUsd } from '../operations/aggregators';
 
 @Injectable()
 export class ClosingService {
@@ -32,24 +32,30 @@ export class ClosingService {
       },
     });
 
+    const [comisiones, pares] = await Promise.all([
+      this.prisma.comision.findMany({ where: { opId: { in: ops.map((o) => o.id) } } }),
+      this.prisma.par.findMany(),
+    ]);
+    const paresInput = pares.map((p) => ({
+      par: p.par, base: p.base, quote: p.quote, compra: p.compra.toString(), venta: p.venta.toString(),
+    }));
+    const tcCierre = new Decimal(dto.tcCierre);
+
+    // B2: spread y comisiones en USD con el TC de cierre (lógica de Admin_caja).
     const agg = aggregateByPar(
       ops.map((o) => ({
+        id: o.id,
         par: o.parId,
         tipo: o.tipo,
         monto: o.monto.toString(),
         cotiz: o.cotiz.toString(),
         contra: o.contra.toString(),
-        pricingMode: o.pricingMode,
       })),
+      comisiones.flatMap((c) => (c.opId ? [{ opId: c.opId, monto: c.monto.toString(), moneda: c.moneda }] : [])),
+      paresInput,
+      tcCierre,
     );
-
-    const comisiones = await this.prisma.comision.findMany({
-      where: { opId: { in: ops.map((o) => o.id) } },
-    });
-    const totalComisionesUsd = comisiones.reduce(
-      (acc, c) => acc.plus(new Decimal(c.monto.toString())),
-      new Decimal(0),
-    );
+    const totalComisionesUsd = new Decimal(agg.comisionesUsd);
 
     const gastos = await this.prisma.gasto.findMany({
       where: {
@@ -62,11 +68,11 @@ export class ClosingService {
       (acc, g) => acc.plus(new Decimal(g.monto.toString())),
       new Decimal(0),
     );
-    const totalGastosUsd = new Decimal(0);
+    const totalGastosUsd = toUsd(totalGastosArs, 'ARS', paresInput, tcCierre);
 
     const saldoInicial = new Decimal(dto.saldoInicialUsd);
     const cajaContada = new Decimal(dto.cajaContadaUsd);
-    const gananciaRealizadaUsd = new Decimal(agg.gananciaTotalUsd);
+    const gananciaRealizadaUsd = new Decimal(agg.spreadUsd);
     const posicionEsperadaUsd = saldoInicial.plus(gananciaRealizadaUsd).minus(totalComisionesUsd).minus(totalGastosUsd);
     const diferenciaUsd = cajaContada.minus(posicionEsperadaUsd);
     const resultadoOperativoUsd = gananciaRealizadaUsd.minus(totalComisionesUsd).minus(totalGastosUsd);
@@ -89,7 +95,7 @@ export class ClosingService {
         totalGastosArs: totalGastosArs.toFixed(2),
         totalGastosUsd: totalGastosUsd.toFixed(2),
         resultadoOperativoUsd: resultadoOperativoUsd.toFixed(2),
-        volumenTotalUsd: String(agg.volumenTotalUsd),
+        volumenTotalUsd: agg.volumenUsd,
         nOps: ops.length,
         notas: dto.notas ?? undefined,
       },

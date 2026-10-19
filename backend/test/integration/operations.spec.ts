@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { createTestApp } from './test-app';
-import { cleanDatabase, createTestUser, createTestPar } from '../utils/db';
+import { cleanDatabase, createTestUser, createTestPar, testPrisma } from '../utils/db';
 
 /**
  * Test de integración: crea una operación real vía HTTP (autenticado) y
@@ -125,5 +125,29 @@ describe('Operations E2E', () => {
       .post(`/operations/${opId}/cancel`)
       .set('Authorization', `Bearer ${token}`)
       .expect(400);
+  });
+
+  it('B2: GET /operations/kpis/par → ganancia = spread − comisiones en USD; la cancelada no aporta', async () => {
+    await createTestPar({ par: 'USD/ARS', compra: '1000.00', venta: '1010.00' });
+    const post = (tipo: 'C' | 'V', monto: string) => request(app.getHttpServer())
+      .post('/operations').set('Authorization', `Bearer ${token}`)
+      .send({ tipo, parId: 'USD/ARS', monto, cobertura: 'efectivo' }).expect(201);
+    const compra = await post('C', '1000');
+    const venta = await post('V', '1000');
+    const cancelada = await post('V', '500');
+    expect([compra.body.cotiz, venta.body.cotiz].map(Number)).toEqual([1000, 1010]);
+    await request(app.getHttpServer()).post(`/operations/${cancelada.body.id}/cancel`)
+      .set('Authorization', `Bearer ${token}`).expect(201);
+    const operadorId = venta.body.operadorId;
+    await testPrisma.comision.create({ data: { codigo: 'CM-B2-1', opId: venta.body.id, operadorId, monto: '2020', moneda: 'quote' } });
+    await testPrisma.comision.create({ data: { codigo: 'CM-B2-2', opId: cancelada.body.id, operadorId, monto: '50', moneda: 'USD' } });
+
+    const res = await request(app.getHttpServer())
+      .get('/operations/kpis/par').set('Authorization', `Bearer ${token}`).expect(200);
+
+    // 1000 × (1010 − 1000) = 10000 ARS ÷ 1010 = 9.90 USD; comisión 2020 ARS = 2 USD.
+    expect([res.body.spreadUsd, res.body.comisionesUsd, res.body.gananciaUsd]).toEqual(['9.9', '2', '7.9']);
+    expect(res.body.stats[0].nOps).toBe(2);
+    expect(res.body.monedasSinCotizacion).toEqual([]);
   });
 });

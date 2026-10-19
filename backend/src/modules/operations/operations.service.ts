@@ -3,7 +3,7 @@ import { PrismaService } from '@common/prisma/prisma.service';
 import { CreateOpDto, UpdateOpDto, OpFilterDto } from './dto/operations.dto';
 import { Operacion, Prisma } from '@prisma/client';
 import { Decimal } from 'decimal.js';
-import { aggregateByPar, aggregateByOperador } from './aggregators';
+import { aggregateByPar, aggregateByOperador, cotizMonedaAUsd, monedasSinCotizacion } from './aggregators';
 
 @Injectable()
 export class OperationsService {
@@ -163,7 +163,11 @@ export class OperationsService {
     });
   }
 
-  /** KPIs agregados por par para un rango de fechas (día por default) */
+  /**
+   * KPIs agregados por par (B2): ganancia = spread − comisiones, en USD.
+   * Las canceladas no generan spread ni comisión. Sin TC de cierre, ARS se
+   * convierte con la venta de USD/ARS (misma regla que Admin_caja).
+   */
   async kpisByPar(startDate?: Date, endDate?: Date) {
     const where: Prisma.OperacionWhereInput = { status: { not: 'cancelada' } };
     if (startDate || endDate) {
@@ -172,19 +176,30 @@ export class OperationsService {
       if (endDate) where.ts.lte = endDate;
     }
 
-    const ops = await this.prisma.operacion.findMany({ where, include: { comision: true } });
+    const [ops, pares] = await Promise.all([
+      this.prisma.operacion.findMany({ where, include: { comision: true } }),
+      this.prisma.par.findMany(),
+    ]);
 
-    const mapped = ops.map((o) => ({
+    const opsInput = ops.map((o) => ({
+      id: o.id,
       par: o.parId,
       tipo: o.tipo,
       monto: o.monto.toString(),
       cotiz: o.cotiz.toString(),
       contra: o.contra.toString(),
-      pricingMode: o.pricingMode,
-      gananciaUsd: o.comision ? o.comision.monto.toString() : undefined,
+    }));
+    const comisiones = ops.flatMap((o) => (o.comision
+      ? [{ opId: o.id, monto: o.comision.monto.toString(), moneda: o.comision.moneda }]
+      : []));
+    const paresInput = pares.map((p) => ({
+      par: p.par, base: p.base, quote: p.quote, compra: p.compra.toString(), venta: p.venta.toString(),
     }));
 
-    return aggregateByPar(mapped);
+    return {
+      ...aggregateByPar(opsInput, comisiones, paresInput),
+      monedasSinCotizacion: monedasSinCotizacion(opsInput, paresInput),
+    };
   }
 
   /** KPIs agregados por operador */
@@ -196,17 +211,28 @@ export class OperationsService {
       if (endDate) where.ts.lte = endDate;
     }
 
-    const ops = await this.prisma.operacion.findMany({
-      where,
-      include: { operador: true, comision: true },
-    });
+    const [ops, pares] = await Promise.all([
+      this.prisma.operacion.findMany({
+        where,
+        include: { operador: true, comision: true, par: true },
+      }),
+      this.prisma.par.findMany(),
+    ]);
+    const paresInput = pares.map((p) => ({
+      par: p.par, base: p.base, quote: p.quote, compra: p.compra.toString(), venta: p.venta.toString(),
+    }));
 
+    // B2: una comisión en moneda quote se convierte a USD; nunca se suma como USD.
     const mapped = ops.map((o) => ({
       operadorId: o.operadorId,
       operadorNombre: o.operador.nombre,
       tipo: o.tipo,
       contra: o.contra.toString(),
-      comisionUsd: o.comision ? o.comision.monto.toString() : undefined,
+      comisionUsd: !o.comision
+        ? undefined
+        : o.comision.moneda === 'USD'
+          ? o.comision.monto.toString()
+          : o.comision.monto.times(cotizMonedaAUsd(o.par.quote, paresInput).toString()).toString(),
     }));
 
     return aggregateByOperador(mapped);
