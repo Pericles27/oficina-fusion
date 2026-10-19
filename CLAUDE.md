@@ -40,7 +40,7 @@ oficina-fusion/
 1. Money saved as canonical decimal text, never float
 2. Operations immutable after closing
 3. Quotations with historical snapshots (never edited)
-4. E-tickets don't show economic data to cadete
+4. E-tickets show the cadete only operational delivery instructions: visit address and contact, deposit account details, and, per tramo, the currency and amount the cadete leaves with the client and, when applicable, the amount the cadete takes back. The cadete never sees quotation/rates (cotiz, clientRate, market rate, puntos), commission, spread, profit, profit split/owner operator, or any balance. Enforced by the backend whitelist `ETICKET_CADETE_SELECT`, never by hiding fields in the UI.
 5. Roles: ADMIN (everything) + CADETE (only e-tickets and basic operations)
 6. Service 13 (Pago de cheques posados) → NEVER IMPLEMENTED
 
