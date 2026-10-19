@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { createTestApp } from './test-app';
-import { cleanDatabase, createTestUser, createTestCliente } from '../utils/db';
+import { cleanDatabase, createTestUser, createTestCliente, testPrisma } from '../utils/db';
 import { RolUsuario } from '@prisma/client';
 
 /**
@@ -45,11 +45,11 @@ describe('F5 — e-tickets, scope de CADETE vía token (bolsa común)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         clienteId: cliente.id,
-        metodoEntrega: 'en_mano',
-        monedaEntregar: 'USD',
-        montoEntregar: '1000.00',
-        monedaRecibir: 'ARS',
-        montoRecibir: '1250000.00',
+        direccionEntrega: 'Calle sintética 123',
+        tramos: [
+          { orden: 1, sentido: 'ENTREGA', canal: 'EFECTIVO', moneda: 'USD', monto: '1000.00' },
+          { orden: 2, sentido: 'RETIRO', canal: 'EFECTIVO', moneda: 'ARS', monto: '1250000.00' },
+        ],
         ...overrides,
       })
       .expect(201);
@@ -92,6 +92,43 @@ describe('F5 — e-tickets, scope de CADETE vía token (bolsa común)', () => {
     // Sí ve lo operativo
     expect(res.body.codigo).toBeDefined();
     expect(res.body.metodoEntrega).toBeDefined();
+  });
+
+  it('U5: el cadete ve montos y cuenta de depósito de un mixto, y nada económico en el JSON', async () => {
+    const adminToken = await loginAs('admin.f5.mixto', [RolUsuario.ADMIN]);
+    const cliente = await createTestCliente();
+    const cuenta = await testPrisma.cuentaCliente.create({ data: {
+      clienteId: cliente.id, banco: 'Banco sintético', numero: 'syn-001', titular: 'Titular sintético',
+      cuitTitular: '20123456789', tipoCuenta: 'CAJA_AHORRO', numeroCuenta: '000111',
+      cbu: '1234567890123456789012', alias: 'sintetico.alias',
+    } });
+    const created = await request(app.getHttpServer())
+      .post('/e-tickets')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        clienteId: cliente.id,
+        direccionEntrega: 'Calle sintética 123',
+        tramos: [
+          { orden: 1, sentido: 'RETIRO', canal: 'EFECTIVO', moneda: 'USD', monto: '1000' },
+          { orden: 2, sentido: 'ENTREGA', canal: 'DEPOSITO', moneda: 'ARS', monto: '1250000.5', cuentaDestinoId: cuenta.id },
+        ],
+      })
+      .expect(201);
+    expect(created.body.metodoEntrega).toBe('mixto');
+    const cadeteToken = await loginAs('cadete.f5.mixto', [RolUsuario.CADETE]);
+
+    const res = await request(app.getHttpServer())
+      .get(`/e-tickets/${created.body.id}`)
+      .set('Authorization', `Bearer ${cadeteToken}`)
+      .expect(200);
+
+    expect(res.body.tramos.map((t: { sentido: string; moneda: string; monto: string }) => [t.sentido, t.moneda, t.monto]))
+      .toEqual([['RETIRO', 'USD', '1000'], ['ENTREGA', 'ARS', '1250000.5']]);
+    expect(res.body.tramos[1].depNumeroCuenta).toBe('000111');
+    expect(res.body.tramos[1].depTipoCuenta).toBe('CAJA_AHORRO');
+    expect(JSON.stringify(res.body)).not.toMatch(
+      /cotiz|clientRate|marketRate|puntos|comision|spread|ganancia|operadorDueno|saldo|montoEntregar|montoRecibir|"operation"/i,
+    );
   });
 
   it('un cadete que pasa ?cadeteId=<otro-id> a mano es ignorado (scope fijo por token)', async () => {

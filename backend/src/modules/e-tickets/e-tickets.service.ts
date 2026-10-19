@@ -1,7 +1,7 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
-import { CreateEticketDto, UpdateEticketDto } from './dto/eticket.dto';
-import { Eticket, EticketEstado, Prisma } from '@prisma/client';
+import { CreateEticketDto, UpdateEticketDto, TramoInput } from './dto/eticket.dto';
+import { EticketTramo, EticketEstado, Prisma } from '@prisma/client';
 
 /**
  * Lista blanca de campos que un CADETE puede ver. `select` explícito:
@@ -10,13 +10,13 @@ import { Eticket, EticketEstado, Prisma } from '@prisma/client';
  * diferencia entre lista blanca y lista negra (ver ANALISIS-FASES-3-4-5.md
  * §1 sobre el riesgo de usar destructuring para "sacar" campos).
  *
- * DECISIÓN PENDIENTE (ver ANALISIS-FASES-3-4-5.md §2, pregunta a Nicolás):
- * ¿el cadete ve el monto que tiene que entregar/recibir? El schema sugiere
- * que sí (es instrucción operativa, no "dato de negocio"), pero el código
- * anterior lo ocultaba. Mientras no haya respuesta, se mantiene el
- * comportamiento MÁS CONSERVADOR recomendado por el análisis: NO se
- * exponen montoEntregar/montoRecibir/monedaEntregar/monedaRecibir al
- * cadete. Para revertir esto hay que cambiar sólo esta constante.
+ * Decisión U5 (Nicolás, 2026-10-16; regla 4 de CLAUDE.md): el cadete ve
+ * instrucciones operativas de la visita y, por tramo, cuánto deja, cuánto
+ * se lleva y a qué cuenta deposita. NUNCA ve la operación ni nada derivado
+ * de ella (cotiz, clientRate, marketRateId, puntos, contra), comisión,
+ * spread, ganancia, reparto/operador dueño ni saldos. Las columnas legado
+ * (banco, cuentaDeposito, monto/moneda Entregar/Recibir) no se exponen: la
+ * fuente de verdad son los tramos.
  */
 const ETICKET_CADETE_SELECT = {
   id: true,
@@ -30,58 +30,132 @@ const ETICKET_CADETE_SELECT = {
   telefonoContacto: true,
   nombreRecibe: true,
   horarioEntrega: true,
-  banco: true,
-  cuentaDeposito: true,
   instrucciones: true,
   confirmadoPor: true,
   confirmadoEn: true,
   creadoEn: true,
-} as const;
+  tramos: {
+    orderBy: { orden: 'asc' },
+    select: {
+      orden: true, sentido: true, canal: true, moneda: true, monto: true,
+      depBeneficiario: true, depCuit: true, depBanco: true, depTipoCuenta: true,
+      depNumeroCuenta: true, depCbu: true, depAlias: true,
+    },
+  },
+} satisfies Prisma.EticketSelect;
+
+// Explicit admin projection: never expose/write deprecated economic columns.
+const ETICKET_ADMIN_SELECT = {
+  id: true, numero: true, codigo: true, ts: true, operationId: true, clienteId: true,
+  estado: true, metodoEntrega: true, direccionEntrega: true, telefonoContacto: true,
+  nombreRecibe: true, horarioEntrega: true, instrucciones: true, confirmadoPor: true,
+  confirmadoEn: true, creadoPor: true, creadoEn: true, createdAt: true, updatedAt: true,
+  tramos: { orderBy: { orden: 'asc' } },
+} satisfies Prisma.EticketSelect;
+
+const emptySnapshot = {
+  depBeneficiario: null, depCuit: null, depBanco: null, depNumeroCuenta: null,
+  depCbu: null, depAlias: null, depTipoCuenta: null,
+};
 
 @Injectable()
 export class ETicketsService {
   constructor(private prisma: PrismaService) {}
 
-  private async nextCodigo(): Promise<{ codigo: string; numero: number }> {
-    const last = await this.prisma.eticket.findFirst({
-      orderBy: { numero: 'desc' },
-      select: { numero: true },
-    });
-    const numero = (last?.numero ?? 0) + 1;
-    return { codigo: `ET-${String(numero).padStart(4, '0')}`, numero };
+  private async validateHeader(tx: Prisma.TransactionClient, clienteId: string, operationId?: string | null, id?: string) {
+    const cliente = await tx.cliente.findUnique({ where: { id: clienteId } });
+    if (!cliente) throw new BadRequestException(`Cliente ${clienteId} no existe`);
+    if (operationId) {
+      const op = await tx.operacion.findUnique({ where: { id: operationId } });
+      if (!op) throw new BadRequestException(`Operación ${operationId} no existe`);
+      const used = await tx.eticket.findUnique({ where: { operationId }, select: { id: true } });
+      if (used && used.id !== id) throw new BadRequestException('Operación ya vinculada a un e-ticket');
+    }
   }
 
-  async create(dto: CreateEticketDto, creadoPor: string): Promise<Eticket> {
-    const cliente = await this.prisma.cliente.findUnique({ where: { id: dto.clienteId } });
-    if (!cliente) throw new BadRequestException(`Cliente ${dto.clienteId} no existe`);
+  private header(dto: UpdateEticketDto) {
+    return {
+      clienteId: dto.clienteId, operationId: dto.operationId,
+      direccionEntrega: dto.direccionEntrega, telefonoContacto: dto.telefonoContacto,
+      nombreRecibe: dto.nombreRecibe, horarioEntrega: dto.horarioEntrega,
+      instrucciones: dto.instrucciones,
+    };
+  }
 
-    if (dto.operationId) {
-      const op = await this.prisma.operacion.findUnique({ where: { id: dto.operationId } });
-      if (!op) throw new BadRequestException(`Operación ${dto.operationId} no existe`);
+  private normalizeDireccion(direccion?: string | null): string | null {
+    return direccion && direccion.trim() ? direccion : null;
+  }
+
+  private delivery(tramos: Array<{ canal: string }>, direccion?: string | null) {
+    if (!tramos.length) throw new BadRequestException('Se requiere al menos un tramo');
+    const cash = tramos.some((t) => t.canal === 'EFECTIVO');
+    const deposit = tramos.some((t) => t.canal === 'DEPOSITO');
+    if (cash !== Boolean(direccion?.trim())) {
+      throw new BadRequestException('Dirección requerida si y sólo si hay EFECTIVO');
     }
+    return cash ? (deposit ? 'mixto' : 'en_mano') : 'deposito_banco';
+  }
 
-    const { codigo, numero } = await this.nextCodigo();
+  private async prepareTramos(tx: Prisma.TransactionClient, clienteId: string, inputs: TramoInput[], previous: EticketTramo[]) {
+    if (!inputs.length) throw new BadRequestException('Se requiere al menos un tramo');
+    const ids = new Set<string>();
+    const orders = new Set<number>();
+    const result: Array<{ id?: string; data: Prisma.EticketTramoUncheckedCreateWithoutEticketInput }> = [];
+    for (const input of inputs) {
+      const old = input.id ? previous.find((t) => t.id === input.id) : undefined;
+      if (input.id && (!old || ids.has(input.id))) throw new BadRequestException('ID de tramo ajeno o duplicado');
+      if (input.id) ids.add(input.id);
+      if (orders.has(input.orden)) throw new BadRequestException('Orden de tramo duplicado');
+      orders.add(input.orden);
+      const data: Prisma.EticketTramoUncheckedCreateWithoutEticketInput = {
+        orden: input.orden, sentido: input.sentido, canal: input.canal,
+        moneda: input.moneda, monto: input.monto, cuentaDestinoId: null, ...emptySnapshot,
+      };
+      if (input.canal === 'DEPOSITO') {
+        if (input.sentido === 'RETIRO') throw new BadRequestException('PENDIENTE_U6: DEPOSITO/RETIRO');
+        const cuentaId = input.cuentaDestinoId === undefined ? old?.cuentaDestinoId : input.cuentaDestinoId;
+        if (!cuentaId) throw new BadRequestException('DEPOSITO requiere cuentaDestinoId');
+        // Ownership is checked even when preserving the historical snapshot; never
+        // copy fresh account details unless this is a new tramo or changed account.
+        const preserve = old?.canal === 'DEPOSITO' && old.cuentaDestinoId === cuentaId;
+        const cuenta = await tx.cuentaCliente.findUnique({ where: { id: cuentaId }, select: {
+          clienteId: true, titular: !preserve, cuitTitular: !preserve, banco: !preserve,
+          numeroCuenta: !preserve, cbu: !preserve, alias: !preserve, tipoCuenta: !preserve,
+        } });
+        if (!cuenta || cuenta.clienteId !== clienteId) throw new BadRequestException('Cuenta de otro cliente o inexistente');
+        const snapshot = preserve
+          ? { depBeneficiario: old.depBeneficiario, depCuit: old.depCuit, depBanco: old.depBanco,
+              depNumeroCuenta: old.depNumeroCuenta, depCbu: old.depCbu, depAlias: old.depAlias, depTipoCuenta: old.depTipoCuenta }
+          : { depBeneficiario: cuenta.titular, depCuit: cuenta.cuitTitular, depBanco: cuenta.banco,
+              depNumeroCuenta: cuenta.numeroCuenta, depCbu: cuenta.cbu, depAlias: cuenta.alias, depTipoCuenta: cuenta.tipoCuenta };
+        const combined = { ...snapshot, ...input.depOverrides };
+        if (combined.depCbu !== null && !/^[0-9]{22}$/.test(combined.depCbu)) throw new BadRequestException('CBU debe tener 22 dígitos');
+        if (![combined.depCbu, combined.depNumeroCuenta, combined.depAlias].some((v) => v?.trim())) {
+          throw new BadRequestException('Depósito requiere al menos un identificador');
+        }
+        Object.assign(data, combined, { cuentaDestinoId: cuentaId });
+      }
+      result.push({ id: input.id, data });
+    }
+    return result;
+  }
 
-    return this.prisma.eticket.create({
-      data: {
-        codigo,
-        numero,
-        clienteId: dto.clienteId,
-        operationId: dto.operationId ?? undefined,
-        metodoEntrega: dto.metodoEntrega,
-        direccionEntrega: dto.direccionEntrega ?? undefined,
-        telefonoContacto: dto.telefonoContacto ?? undefined,
-        nombreRecibe: dto.nombreRecibe ?? undefined,
-        horarioEntrega: dto.horarioEntrega ?? undefined,
-        banco: dto.banco ?? undefined,
-        cuentaDeposito: dto.cuentaDeposito ?? undefined,
-        instrucciones: dto.instrucciones ?? undefined,
-        monedaEntregar: dto.monedaEntregar ?? undefined,
-        montoEntregar: dto.montoEntregar ?? undefined,
-        monedaRecibir: dto.monedaRecibir ?? undefined,
-        montoRecibir: dto.montoRecibir ?? undefined,
-        creadoPor,
-      },
+  async create(dto: CreateEticketDto, creadoPor: string) {
+    return this.prisma.$transaction(async (tx) => {
+      // Transaction-scoped allocation lock: concurrent creates cannot choose the same numero.
+      await tx.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(2147483000)`;
+      await this.validateHeader(tx, dto.clienteId, dto.operationId);
+      const prepared = await this.prepareTramos(tx, dto.clienteId, dto.tramos, []);
+      const direccionEntrega = this.normalizeDireccion(dto.direccionEntrega);
+      const metodoEntrega = this.delivery(dto.tramos, direccionEntrega);
+      const last = await tx.eticket.findFirst({ orderBy: { numero: 'desc' }, select: { numero: true } });
+      const numero = (last?.numero ?? 0) + 1;
+      return tx.eticket.create({
+        data: { ...this.header(dto), clienteId: dto.clienteId, numero,
+          codigo: `ET-${String(numero).padStart(4, '0')}`, metodoEntrega, direccionEntrega, creadoPor,
+          tramos: { create: prepared.map((t) => t.data) } },
+        select: ETICKET_ADMIN_SELECT,
+      });
     });
   }
 
@@ -123,6 +197,7 @@ export class ETicketsService {
         skip: (page - 1) * pageSize,
         take: pageSize,
         orderBy: { ts: 'desc' },
+        select: ETICKET_ADMIN_SELECT,
       }),
       this.prisma.eticket.count({ where }),
     ]);
@@ -130,8 +205,8 @@ export class ETicketsService {
     return { data, total, page, pageSize };
   }
 
-  async findOne(id: string): Promise<Eticket> {
-    const et = await this.prisma.eticket.findUnique({ where: { id } });
+  async findOne(id: string) {
+    const et = await this.prisma.eticket.findUnique({ where: { id }, select: ETICKET_ADMIN_SELECT });
     if (!et) throw new NotFoundException(`E-Ticket ${id} no encontrado`);
     return et;
   }
@@ -148,18 +223,53 @@ export class ETicketsService {
       select: ETICKET_CADETE_SELECT,
     });
     if (!et) throw new NotFoundException(`E-Ticket ${id} no encontrado`);
+    if (et.estado !== 'pendiente') throw new NotFoundException(`E-Ticket ${id} no encontrado`);
     return et;
   }
 
-  async update(id: string, dto: UpdateEticketDto): Promise<Eticket> {
-    await this.findOne(id);
-    return this.prisma.eticket.update({
-      where: { id },
-      data: dto,
+  async update(id: string, dto: UpdateEticketDto) {
+    return this.prisma.$transaction(async (tx) => {
+      // Serialize edits with state transitions too (UPDATE takes the same row lock).
+      await tx.$queryRaw`SELECT id FROM eticket WHERE id = ${id} FOR UPDATE`;
+      const old = await tx.eticket.findUnique({ where: { id }, include: { tramos: true } });
+      if (!old) throw new NotFoundException(`E-Ticket ${id} no encontrado`);
+      if (old.estado !== 'pendiente') throw new ConflictException('Sólo se puede editar un e-ticket pendiente');
+      const clienteId = dto.clienteId ?? old.clienteId;
+      const operationId = dto.operationId === undefined ? old.operationId : dto.operationId;
+      await this.validateHeader(tx, clienteId, operationId, id);
+      const resulting = dto.tramos ?? old.tramos;
+      const direccion = this.normalizeDireccion(dto.direccionEntrega === undefined ? old.direccionEntrega : dto.direccionEntrega);
+      const metodoEntrega = this.delivery(resulting, direccion);
+      if (dto.tramos !== undefined) {
+        const prepared = await this.prepareTramos(tx, clienteId, dto.tramos, old.tramos);
+        const kept = prepared.flatMap((t) => t.id ? [t.id] : []);
+        await tx.eticketTramo.deleteMany({ where: { eticketId: id, id: { notIn: kept } } });
+        // Park retained IDs in free positive slots absent from BOTH order sets.
+        // This also supports valid int32 maximum orders without overflow.
+        const occupied = new Set([...old.tramos.map((t) => t.orden), ...dto.tramos.map((t) => t.orden)]);
+        let temporaryOrder = 1;
+        for (const tramoId of kept) {
+          while (occupied.has(temporaryOrder)) temporaryOrder++;
+          occupied.add(temporaryOrder);
+          await tx.eticketTramo.update({ where: { id: tramoId }, data: { orden: temporaryOrder } });
+        }
+        for (const item of prepared) {
+          if (item.id) await tx.eticketTramo.update({ where: { id: item.id }, data: item.data });
+          else await tx.eticketTramo.create({ data: { ...item.data, eticketId: id } });
+        }
+      } else if (clienteId !== old.clienteId) {
+        for (const tramo of old.tramos) {
+          if (tramo.cuentaDestinoId) {
+            const cuenta = await tx.cuentaCliente.findUnique({ where: { id: tramo.cuentaDestinoId } });
+            if (!cuenta || cuenta.clienteId !== clienteId) throw new BadRequestException('Cuenta de otro cliente');
+          }
+        }
+      }
+      return tx.eticket.update({ where: { id }, data: { ...this.header(dto), metodoEntrega, direccionEntrega: direccion }, select: ETICKET_ADMIN_SELECT });
     });
   }
 
-  async confirm(id: string, confirmadoPor: string): Promise<Eticket> {
+  async confirm(id: string, confirmadoPor: string) {
     const et = await this.findOne(id);
     if (et.estado === 'confirmado') {
       throw new BadRequestException('El e-ticket ya está confirmado');
@@ -170,10 +280,12 @@ export class ETicketsService {
     return this.prisma.eticket.update({
       where: { id },
       data: { estado: 'confirmado', confirmadoPor, confirmadoEn: new Date() },
+      // This route is also accessible to CADETE: answer with the cadete whitelist.
+      select: ETICKET_CADETE_SELECT,
     });
   }
 
-  async cancel(id: string): Promise<Eticket> {
+  async cancel(id: string) {
     const et = await this.findOne(id);
     if (et.estado === 'confirmado') {
       throw new BadRequestException('No se puede cancelar un e-ticket ya confirmado');
@@ -181,6 +293,7 @@ export class ETicketsService {
     return this.prisma.eticket.update({
       where: { id },
       data: { estado: 'cancelado' },
+      select: ETICKET_ADMIN_SELECT,
     });
   }
 }

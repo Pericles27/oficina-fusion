@@ -2,7 +2,9 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '@common/prisma/prisma.service';
 import { CreateCustomerDto, UpdateCustomerDto } from './dto/create-customer.dto';
 import { SaldoAdjustmentDto } from './dto/saldo-adjustment.dto';
-import { Cliente, Prisma } from '@prisma/client';
+import { CreateAccountDto, UpdateAccountDto } from './dto/account.dto';
+import { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
+import { Cliente, ClienteDireccion, Prisma } from '@prisma/client';
 import { Decimal } from 'decimal.js';
 
 @Injectable()
@@ -74,6 +76,251 @@ export class CustomersService {
   async remove(id: string): Promise<void> {
     await this.findOne(id);
     await this.prisma.cliente.update({ where: { id }, data: { activo: false } });
+  }
+
+  // =========================================================
+  // DIRECCIONES — CRUD anidado a cliente
+  // =========================================================
+
+  /**
+   * Crea una dirección anidada a un cliente.
+   * clienteId proviene exclusivamente del path param; se ignora cualquier
+   * campo clienteId que llegara en el body (si existiera).
+   * Whitelist exacta: direccion, tipo, ciudad, provincia, codigoPost, principal.
+   */
+  async createAddress(clienteId: string, dto: CreateAddressDto): Promise<ClienteDireccion> {
+    await this.findOne(clienteId);
+
+    return this.prisma.clienteDireccion.create({
+      data: {
+        clienteId,
+        direccion: dto.direccion,
+        tipo: dto.tipo ?? null,
+        ciudad: dto.ciudad ?? null,
+        provincia: dto.provincia ?? null,
+        codigoPost: dto.codigoPost ?? null,
+        principal: dto.principal ?? false,
+      },
+    });
+  }
+
+  /**
+   * Lista todas las direcciones de un cliente.
+   */
+  async findAddresses(clienteId: string): Promise<Prisma.ClienteDireccionGetPayload<{}>[]> {
+    await this.findOne(clienteId);
+
+    return this.prisma.clienteDireccion.findMany({
+      where: { clienteId },
+      orderBy: { id: 'asc' },
+    });
+  }
+
+  /**
+   * Devuelve detalle de una dirección específica de un cliente.
+   * Verifica ownership: solo retorna si direccion.clienteId == clienteId.
+   */
+  async findAddress(clienteId: string, addressId: string): Promise<Prisma.ClienteDireccionGetPayload<{}>> {
+    await this.findOne(clienteId);
+
+    const address = await this.prisma.clienteDireccion.findFirst({
+      where: {
+        id: addressId,
+        clienteId,
+      },
+    });
+
+    if (!address) {
+      throw new NotFoundException('Dirección no encontrada para este cliente');
+    }
+
+    return address;
+  }
+
+  /**
+   * Actualiza una dirección existente de un cliente.
+   * Whitelist exacta de campos: direccion, tipo, ciudad, provincia, codigoPost, principal.
+   * Verifica ownership estricta: solo se actualiza si direccion.clienteId == clienteId.
+   * Persiste el valor existente de cada campo si no fue provisto en el DTO.
+   */
+  async updateAddress(
+    clienteId: string,
+    addressId: string,
+    dto: UpdateAddressDto,
+  ): Promise<Prisma.ClienteDireccionGetPayload<{}>> {
+    await this.findOne(clienteId);
+
+    const existing = await this.prisma.clienteDireccion.findFirst({
+      where: {
+        id: addressId,
+        clienteId,
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Dirección no encontrada para este cliente');
+    }
+
+    return this.prisma.clienteDireccion.update({
+      where: { id: addressId },
+      data: {
+        direccion: dto.direccion ?? existing.direccion,
+        tipo: dto.tipo !== undefined ? dto.tipo : existing.tipo,
+        ciudad: dto.ciudad !== undefined ? dto.ciudad : existing.ciudad,
+        provincia: dto.provincia !== undefined ? dto.provincia : existing.provincia,
+        codigoPost: dto.codigoPost !== undefined ? dto.codigoPost : existing.codigoPost,
+        principal:
+          dto.principal !== undefined ? dto.principal : existing.principal,
+      },
+    });
+  }
+
+  /**
+   * Elimina una dirección de un cliente (hard delete).
+   * Verifica ownership estricta. No hay FK con onDelete SET NULL en
+   * otros modelos, por lo que la eliminación es segura.
+   */
+  async deleteAddress(clienteId: string, addressId: string): Promise<void> {
+    await this.findOne(clienteId);
+
+    const existing = await this.prisma.clienteDireccion.findFirst({
+      where: {
+        id: addressId,
+        clienteId,
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Dirección no encontrada para este cliente');
+    }
+
+    await this.prisma.clienteDireccion.delete({
+      where: { id: addressId },
+    });
+  }
+
+  // =========================================================
+  // CUENTAS — CRUD anidado a cliente
+  // =========================================================
+
+  /**
+   * Crea una cuenta bancaria anidada a un cliente.
+   * Verifica ownership: la cuenta siempre se escribe con el clienteId del
+   * path param; se rechaza si cliente no existe. No se usa clienteId del
+   * body (si llegara, se ignora).
+   */
+  async createAccount(clienteId: string, dto: CreateAccountDto) {
+    await this.findOne(clienteId);
+
+    return this.prisma.cuentaCliente.create({
+      data: {
+        clienteId,
+        banco: dto.banco,
+        tipo: dto.tipo ?? null,
+        numero: dto.numero,
+        titular: dto.titular ?? null,
+        activo: dto.activo ?? true,
+        tipoCuenta: dto.tipoCuenta ?? null,
+        numeroCuenta: dto.numeroCuenta ?? null,
+        cbu: dto.cbu ?? null,
+        alias: dto.alias ?? null,
+        cuitTitular: dto.cuitTitular ?? null,
+      },
+    });
+  }
+
+  /**
+   * Lista todas las cuentas de un cliente.
+   */
+  async findAccounts(clienteId: string): Promise<Prisma.CuentaClienteGetPayload<{}>[]> {
+    await this.findOne(clienteId);
+
+    return this.prisma.cuentaCliente.findMany({
+      where: { clienteId },
+      orderBy: { id: 'asc' },
+    });
+  }
+
+  /**
+   * Devuelve detalle de una cuenta específica de un cliente.
+   * Verifica ownership: solo se retorna si cuenta.clienteId == clienteId.
+   */
+  async findAccount(clienteId: string, accountId: string): Promise<Prisma.CuentaClienteGetPayload<{}>> {
+    await this.findOne(clienteId);
+
+    const account = await this.prisma.cuentaCliente.findFirst({
+      where: {
+        id: accountId,
+        clienteId,
+      },
+    });
+
+    if (!account) {
+      throw new NotFoundException('Cuenta no encontrada para este cliente');
+    }
+
+    return account;
+  }
+
+  /**
+   * Actualiza una cuenta existente de un cliente.
+   * Verifica ownership estricta: solo se actualiza si cuenta.clienteId == clienteId.
+   */
+  async updateAccount(clienteId: string, accountId: string, dto: UpdateAccountDto) {
+    await this.findOne(clienteId);
+
+    const existing = await this.prisma.cuentaCliente.findFirst({
+      where: {
+        id: accountId,
+        clienteId,
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Cuenta no encontrada para este cliente');
+    }
+
+    return this.prisma.cuentaCliente.update({
+      where: { id: accountId },
+      data: {
+        banco: dto.banco ?? existing.banco,
+        tipo: dto.tipo !== undefined ? dto.tipo : existing.tipo,
+        numero: dto.numero ?? existing.numero,
+        titular: dto.titular !== undefined ? dto.titular : existing.titular,
+        activo: dto.activo !== undefined ? dto.activo : existing.activo,
+        tipoCuenta: dto.tipoCuenta !== undefined ? dto.tipoCuenta : existing.tipoCuenta,
+        numeroCuenta: dto.numeroCuenta !== undefined ? dto.numeroCuenta : existing.numeroCuenta,
+        cbu: dto.cbu !== undefined ? dto.cbu : existing.cbu,
+        alias: dto.alias !== undefined ? dto.alias : existing.alias,
+        cuitTitular: dto.cuitTitular !== undefined ? dto.cuitTitular : existing.cuitTitular,
+      },
+    });
+  }
+
+  /**
+   * Desactiva una cuenta (soft delete).
+   * Verifica ownership estricta.
+   */
+  async deleteAccount(clienteId: string, accountId: string): Promise<void> {
+    await this.findOne(clienteId);
+
+    const existing = await this.prisma.cuentaCliente.findFirst({
+      where: {
+        id: accountId,
+        clienteId,
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Cuenta no encontrada para este cliente');
+    }
+
+    // Soft delete: marcar inactivo, no hard delete para preservar referencias
+    // de e-ticket tramos (FK con onDelete SET NULL).
+    await this.prisma.cuentaCliente.update({
+      where: { id: accountId },
+      data: { activo: false },
+    });
   }
 
   /**

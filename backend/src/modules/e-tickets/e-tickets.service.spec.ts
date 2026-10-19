@@ -90,8 +90,9 @@ describe('ETicketsService — F5 fuga de datos económicos al cadete', () => {
 
       const call = prisma.eticket.findMany.mock.calls[0][0];
       expect(call.where.estado).toBe('confirmado');
-      // Sin select: ADMIN/OPERADOR reciben el objeto completo
-      expect(call.select).toBeUndefined();
+      expect(call.select.tramos.orderBy).toEqual({ orden: 'asc' });
+      expect(call.select.montoEntregar).toBeUndefined();
+      expect(call.select.banco).toBeUndefined();
     });
   });
 
@@ -111,6 +112,14 @@ describe('ETicketsService — F5 fuga de datos económicos al cadete', () => {
       expect(call.select.montoRecibir).toBeUndefined();
       expect(call.select.monedaEntregar).toBeUndefined();
       expect(call.select.monedaRecibir).toBeUndefined();
+      // U5: tramos con montos y cuenta de depósito, sin FK ni datos de la operación.
+      expect(Object.keys(call.select.tramos.select).sort()).toEqual([
+        'canal', 'depAlias', 'depBanco', 'depBeneficiario', 'depCbu', 'depCuit',
+        'depNumeroCuenta', 'depTipoCuenta', 'moneda', 'monto', 'orden', 'sentido',
+      ]);
+      expect(call.select.banco).toBeUndefined();
+      expect(call.select.cuentaDeposito).toBeUndefined();
+      expect(call.select.operation).toBeUndefined();
     });
 
     it('lanza NotFoundException si el e-ticket no existe', async () => {
@@ -120,13 +129,14 @@ describe('ETicketsService — F5 fuga de datos económicos al cadete', () => {
   });
 
   describe('findOne (vista completa, ADMIN/OPERADOR)', () => {
-    it('no usa select — devuelve el objeto completo incluyendo campos económicos', async () => {
+    it('usa proyección admin con tramos ordenados y sin columnas económicas legacy', async () => {
       prisma.eticket.findUnique.mockResolvedValue(fullEticket);
-      const result = await service.findOne('et-1');
+      await service.findOne('et-1');
 
       const call = prisma.eticket.findUnique.mock.calls[0][0];
-      expect(call.select).toBeUndefined();
-      expect(result.montoEntregar).toBeDefined();
+      expect(call.select.tramos.orderBy).toEqual({ orden: 'asc' });
+      expect(call.select.montoEntregar).toBeUndefined();
+      expect(call.select.banco).toBeUndefined();
     });
   });
 });

@@ -8,7 +8,6 @@ import {
   Query,
   Req,
   UseGuards,
-  UsePipes,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { ETicketsService } from './e-tickets.service';
@@ -33,8 +32,7 @@ export class ETicketsController {
   // en create, y sin restricción en update — ver §2A del plan).
   @Post()
   @Roles(RolUsuario.ADMIN, RolUsuario.OPERADOR)
-  @UsePipes(new ZodValidationPipe(CreateEticketSchema))
-  create(@Body() dto: CreateEticketDto, @Req() req: Request & { user: { id: string } }) {
+  create(@Body(new ZodValidationPipe(CreateEticketSchema)) dto: CreateEticketDto, @Req() req: Request & { user: { id: string } }) {
     return this.eTicketsService.create(dto, req.user.id);
   }
 
@@ -76,8 +74,7 @@ export class ETicketsController {
 
   @Put(':id')
   @Roles(RolUsuario.ADMIN, RolUsuario.OPERADOR)
-  @UsePipes(new ZodValidationPipe(UpdateEticketSchema))
-  update(@Param('id') id: string, @Body() dto: UpdateEticketDto) {
+  update(@Param('id') id: string, @Body(new ZodValidationPipe(UpdateEticketSchema)) dto: UpdateEticketDto) {
     return this.eTicketsService.update(id, dto);
   }
 

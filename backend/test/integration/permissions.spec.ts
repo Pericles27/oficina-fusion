@@ -93,7 +93,7 @@ describe('F2 — matriz de permisos por rol', () => {
       await request(app.getHttpServer())
         .post('/e-tickets')
         .set('Authorization', `Bearer ${token}`)
-        .send({ clienteId: cliente.id, metodoEntrega: 'en_mano' })
+        .send({ clienteId: cliente.id, direccionEntrega: 'Calle sintética 1', tramos: [{ orden: 1, sentido: 'ENTREGA', canal: 'EFECTIVO', moneda: 'USD', monto: '100' }] })
         .expect(403);
     });
 
@@ -104,7 +104,7 @@ describe('F2 — matriz de permisos por rol', () => {
       await request(app.getHttpServer())
         .post('/e-tickets')
         .set('Authorization', `Bearer ${token}`)
-        .send({ clienteId: cliente.id, metodoEntrega: 'en_mano' })
+        .send({ clienteId: cliente.id, direccionEntrega: 'Calle sintética 1', tramos: [{ orden: 1, sentido: 'ENTREGA', canal: 'EFECTIVO', moneda: 'USD', monto: '100' }] })
         .expect(201);
     });
   });
