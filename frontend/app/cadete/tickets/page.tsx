@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import Link from 'next/link';
-import { FileText, CheckCircle, Mail, Eye, Clock, Plus, Search } from 'lucide-react';
+import { FileText, CheckCircle, Mail, Eye, Clock, Search } from 'lucide-react';
 import { DataList, type DataColumn } from '@/components/DataList';
 import { SearchBar, Pagination, EmptyState } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
@@ -147,13 +146,6 @@ export default function TicketsPage() {
             Entregas pendientes — bolsa común
           </p>
         </div>
-        {/* F5: fuera de alcance — crear e-tickets es ADMIN/OPERADOR
-            (e-tickets.controller.ts:35). Esta página sigue hardcodeada,
-            reportado explícitamente en el entregable. */}
-        <Link href="/cadete/tickets/new" className="btn btn-primary btn-sm no-underline">
-          <Plus className="w-4 h-4" />
-          Nuevo
-        </Link>
       </header>
 
       {error && (
