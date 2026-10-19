@@ -11,7 +11,7 @@ import { eticketsApi, fmtMonto, METODO_ENTREGA_LABEL, type EticketCadete } from 
  *
  * El backend decide qué ve el cadete (lista blanca `ETICKET_CADETE_SELECT`,
  * regla 4): la visita y, por tramo, cuánto deja, cuánto se lleva y a qué
- * cuenta deposita. Nunca cotización, comisión, spread ni ganancia. Esta
+ * cuenta deposita; nunca datos económicos de la operación (regla 4). Esta
  * pantalla sólo muestra lo que llega; los montos se formatean, no se calculan.
  */
 
