@@ -17,6 +17,8 @@ async function bootstrap() {
     origin: [
       process.env.FRONTEND_URL || 'http://localhost:3000',
       'https://oficina-fusion-web.fly.dev',
+      // Demo publicada en Netlify (frontend estático contra este backend)
+      'https://oficina-fusion-demo-b8bad1b2.netlify.app',
     ],
     credentials: true,
   });
