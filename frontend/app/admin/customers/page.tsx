@@ -71,7 +71,7 @@ export default function CustomersPage() {
       <div className="relative">
         <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--warm-gray-3)' }} />
         <input
-          className="input pl-9 w-full"
+          className="input input-icon-left w-full"
           placeholder="Buscar por nombre, alias o documento…"
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}

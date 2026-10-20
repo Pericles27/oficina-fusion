@@ -162,7 +162,7 @@ export default function UsersPage() {
           style={{ color: 'var(--warm-gray-3)' }}
         />
         <input
-          className="input pl-9 w-full"
+          className="input input-icon-left w-full"
           placeholder="Buscar por nombre, usuario o email…"
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}

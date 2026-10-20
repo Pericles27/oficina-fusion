@@ -37,10 +37,9 @@ export function AppShell({ brand, brandIcon: BrandIcon, nav, user, onLogout, chi
     <div className="min-h-dvh md:flex">
       {/* ── Sidebar: solo desktop ── */}
       <aside
-        className={`hidden md:flex md:flex-col md:shrink-0 md:sticky md:top-0 md:h-dvh glass-thick
+        className={`hidden md:flex md:flex-col md:shrink-0 md:sticky md:top-0 md:h-dvh sidebar-ink
                     transition-[width] duration-500 ease-[var(--ease-smooth)]
-                    ${expanded ? 'md:w-[264px]' : 'md:w-[78px]'}`}
-        style={{ borderRadius: 0, borderTop: 'none', borderBottom: 'none', borderLeft: 'none' }}
+                    ${expanded ? 'md:w-[232px]' : 'md:w-[78px]'}`}
       >
         {/* Brand */}
         <div className="flex items-center justify-between gap-2 px-4 py-4">
@@ -49,14 +48,7 @@ export function AppShell({ brand, brandIcon: BrandIcon, nav, user, onLogout, chi
             className="flex items-center gap-2.5 min-w-0 no-underline"
             aria-label={brand}
           >
-            <span
-              className="grid place-items-center w-10 h-10 shrink-0 text-white"
-              style={{
-                borderRadius: 'var(--radius-sm)',
-                background: 'linear-gradient(180deg, var(--accent-hover), var(--accent))',
-                boxShadow: 'inset 0 1px 0 var(--specular-highlight), 0 5px 16px var(--accent-glow)',
-              }}
-            >
+            <span className="brand-mark w-10 h-10">
               <BrandIcon className="w-5 h-5" />
             </span>
             {expanded && (
@@ -146,14 +138,7 @@ export function AppShell({ brand, brandIcon: BrandIcon, nav, user, onLogout, chi
           }}
         >
           <Link href={nav[0].href} className="flex items-center gap-2.5 no-underline min-w-0">
-            <span
-              className="grid place-items-center w-9 h-9 shrink-0 text-white"
-              style={{
-                borderRadius: 'var(--radius-xs)',
-                background: 'linear-gradient(180deg, var(--accent-hover), var(--accent))',
-                boxShadow: 'inset 0 1px 0 var(--specular-highlight), 0 4px 12px var(--accent-glow)',
-              }}
-            >
+            <span className="brand-mark w-9 h-9">
               <BrandIcon className="w-[18px] h-[18px]" />
             </span>
             <span className="text-[16px] font-semibold tracking-tight truncate"

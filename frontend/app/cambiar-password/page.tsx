@@ -71,12 +71,8 @@ export default function CambiarPasswordPage() {
       <div className="w-full max-w-[420px] flex flex-col gap-7 animate-in">
         <header className="flex flex-col items-center text-center gap-3">
           <span
-            className="grid place-items-center w-[68px] h-[68px] text-white"
-            style={{
-              borderRadius: 'var(--radius-lg)',
-              background: 'linear-gradient(180deg, var(--blue-hover), var(--blue))',
-              boxShadow: 'inset 0 1px 0 var(--specular-highlight), 0 14px 38px var(--accent-glow)',
-            }}
+            className="brand-mark w-[68px] h-[68px]"
+            style={{ borderRadius: 'var(--radius-lg)' }}
           >
             <KeyRound className="w-8 h-8" />
           </span>

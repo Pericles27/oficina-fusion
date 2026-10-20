@@ -32,11 +32,8 @@ export default function Home() {
   return (
     <main className="min-h-dvh grid place-items-center">
       <span
-        className="grid place-items-center w-[68px] h-[68px] text-white animate-pulse"
-        style={{
-          borderRadius: 'var(--radius-lg)',
-          background: 'linear-gradient(180deg, var(--blue-hover), var(--blue))',
-        }}
+        className="brand-mark w-[68px] h-[68px] animate-pulse"
+        style={{ borderRadius: 'var(--radius-lg)' }}
       >
         <Building2 className="w-8 h-8" />
       </span>
