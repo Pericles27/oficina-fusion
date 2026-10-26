@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import { CUSTODIAS } from '../saldo';
+
+/** #19: si el saldo del cliente está dentro de la caja o separado. */
+const custodia = z.enum(CUSTODIAS);
 
 export const createCustomerSchema = z.object({
   nombre: z.string().min(1, 'nombre es requerido'),
@@ -6,7 +10,7 @@ export const createCustomerSchema = z.object({
   alias: z.string().optional(),
   tipo: z.enum(['Persona', 'Empresa']),
   doc: z.string().optional(),
-  custodia: z.string().optional(),
+  custodia: custodia.optional(),
   notas: z.string().optional(),
   puntosHabituales: z.number().optional(),
 });
@@ -19,7 +23,7 @@ export const updateCustomerSchema = z.object({
   alias: z.string().optional(),
   tipo: z.enum(['Persona', 'Empresa']).optional(),
   doc: z.string().optional(),
-  custodia: z.string().optional(),
+  custodia: custodia.optional(),
   notas: z.string().optional(),
   activo: z.boolean().optional(),
   puntosHabituales: z.number().optional(),

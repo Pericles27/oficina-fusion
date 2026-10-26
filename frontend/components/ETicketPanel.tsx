@@ -7,7 +7,7 @@ import {
   Banknote, Building2, MapPin, Plus, Trash2,
 } from 'lucide-react';
 import { ApiError } from '@/lib/api';
-import { patasDe, OP_STATUS_LABEL, type Operation, type Par } from '@/lib/caja-store';
+import { patasDe, useCaja, OP_STATUS_LABEL, type CoberturaTipo, type Operation, type Par } from '@/lib/caja-store';
 import { customersApi, resumenCuenta, TIPO_CUENTA_LABEL, type CuentaCliente } from '@/lib/customers';
 import {
   eticketsApi, fmtMonto, DEP_KEYS, ESTADO_LABEL, METODO_ENTREGA_LABEL, SENTIDO_LABEL,
@@ -20,12 +20,14 @@ import {
    - Visita (dirección, contacto, horario): una sola vez por e-ticket,
      y sólo si hay algún tramo en efectivo.
    - Tramos: sentido (dejar / retirar), canal, moneda y monto. El
-     depósito sólo existe al DEJAR (retirar por depósito espera U6).
+     depósito sólo existe al DEJAR: la oficina no recibe depósitos (U6).
    - Se guarda con POST/PUT /e-tickets (contrato de C2): cada tramo
      viaja con su `id`; los datos de la cuenta los copia el backend y
      un ajuste manual viaja sólo en `depOverrides`.
-   - Los montos son strings; la suma contra la operación no se controla
-     hasta que Nicolás responda U7.
+   - Los montos son strings. U7: los tramos tienen que sumar exactamente
+     la operación; lo controla el backend y su mensaje se muestra tal cual.
+   - #19: con cobertura "saldo" la pata en USD se liquida contra el saldo
+     del cliente al finalizar la operación y no lleva tramos.
    ============================================================= */
 
 const MONEDAS = ['ARS', 'USD', 'EUR', 'GBP', 'BRL', 'USDT'];
@@ -93,17 +95,22 @@ function visitaDe(e: EticketAdmin | null): VisitaDraft {
 function sugerencia(op: Operation, par: Par): TramoDraft[] {
   const p = patasDe(op, par);
   const base = { canal: 'EFECTIVO' as TramoCanal, cuentaDestinoId: null, guardado: null, overrides: {} };
-  return [
+  const tramos: TramoDraft[] = [
     { ...base, key: nuevaKey(), sentido: 'ENTREGA', moneda: p.entregamos.moneda, monto: p.entregamos.monto },
     { ...base, key: nuevaKey(), sentido: 'RETIRO', moneda: p.recibimos.moneda, monto: p.recibimos.monto },
   ];
+  // #19: contra saldo, la pata en USD no se entrega ni se retira.
+  return op.cobertura === 'saldo' ? tramos.filter((t) => t.moneda !== 'USD') : tramos;
 }
+
+const COBERTURA_LABEL: Record<CoberturaTipo, string> = { efectivo: 'Todo en la visita', saldo: 'USD contra saldo' };
 
 export function ETicketPanel({ op, parDef, onClose }: {
   op: Operation;
   parDef: Par;
   onClose: () => void;
 }) {
+  const { dispatch } = useCaja();
   const [eticket, setEticket] = useState<EticketAdmin | null>(null);
   const [cuentas, setCuentas] = useState<CuentaCliente[]>([]);
   const [tramos, setTramos] = useState<TramoDraft[]>([]);
@@ -265,6 +272,25 @@ export function ETicketPanel({ op, parDef, onClose }: {
             </section>
           ) : (
             <>
+              {/* #19: la pata en USD puede ir contra el saldo del cliente. Se elige antes de crear el e-ticket. */}
+              <section className="eticket-section" aria-label="Cobertura">
+                <span className="label">Cobertura</span>
+                <div className="metodo-switch mt-2" role="group" aria-label="Cobertura">
+                  {(['efectivo', 'saldo'] as CoberturaTipo[]).map((c) => (
+                    <button key={c} type="button" className="metodo-opt" disabled={!!eticket || op.status === 'finalizada'}
+                            data-active={String(op.cobertura === c)}
+                            onClick={() => dispatch({ type: 'EDIT_OP', id: op.id, patch: { cobertura: c } })}>
+                      {COBERTURA_LABEL[c]}
+                    </button>
+                  ))}
+                </div>
+                {op.cobertura === 'saldo' && (
+                  <p className="m-0 mt-1.5 caption" style={{ color: 'var(--warm-gray-3)' }}>
+                    Los USD se descuentan o se suman al saldo del cliente cuando la operación se completa.
+                  </p>
+                )}
+              </section>
+
               {!eticket && (
                 <section className="eticket-section">
                   <div className="eticket-balance is-warn">
@@ -400,7 +426,7 @@ function TramoEditor({ t, i, total, cuentas, editable, onPatch, onMover, onQuita
   const cambioCuenta = !!t.guardado && t.guardado.cuentaDestinoId !== null && !mismaCuenta;
 
   const setSentido = (sentido: TramoSentido) =>
-    // Retirar por depósito no existe hasta U6: al pasar a retiro, vuelve a efectivo.
+    // La oficina no recibe depósitos (U6): al pasar a retiro, vuelve a efectivo.
     onPatch(sentido === 'RETIRO' && t.canal === 'DEPOSITO'
       ? { sentido, canal: 'EFECTIVO', cuentaDestinoId: null, overrides: {} }
       : { sentido });
@@ -440,7 +466,7 @@ function TramoEditor({ t, i, total, cuentas, editable, onPatch, onMover, onQuita
                 data-active={String(t.canal === 'EFECTIVO')} onClick={() => setCanal('EFECTIVO')}>
           <Banknote className="w-3.5 h-3.5" /> Efectivo
         </button>
-        {/* U6: retirar por depósito no se ofrece hasta que Nicolás lo defina. */}
+        {/* U6: la oficina no recibe depósitos, así que retirar es siempre en efectivo. */}
         {t.sentido === 'ENTREGA' && (
           <button type="button" className="metodo-opt" disabled={!editable}
                   data-active={String(t.canal === 'DEPOSITO')} onClick={() => setCanal('DEPOSITO')}>

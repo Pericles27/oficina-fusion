@@ -226,7 +226,7 @@ describe('OperationsService (integración con Postgres de test)', () => {
 
   it('kpisByOperador agrega correctamente por operador', async () => {
     const user = await createTestUser({ username: 'operador13' });
-    await createTestPar({ par: 'USD/ARS' });
+    await createTestPar({ par: 'USD/ARS', compra: '1000', venta: '1010' });
     await service.create({ tipo: 'C', parId: 'USD/ARS', monto: '10', cobertura: 'efectivo' } as any, user.id);
     await service.create({ tipo: 'V', parId: 'USD/ARS', monto: '5', cobertura: 'efectivo' } as any, user.id);
 
@@ -234,6 +234,8 @@ describe('OperationsService (integración con Postgres de test)', () => {
     expect(kpi.stats).toHaveLength(1);
     expect(kpi.stats[0].nOps).toBe(2);
     expect(kpi.nOpsTotal).toBe(2);
+    // #9: volumen en USD, no en ARS. Compra 10 × 1000 + venta 5 × 1010 = 15050 ARS ÷ 1010.
+    expect(kpi.stats[0].volumenTotalUsd).toBeCloseTo(15050 / 1010, 6);
   });
 
   it('asocia clienteId cuando se provee en la creación', async () => {

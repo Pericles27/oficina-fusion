@@ -69,9 +69,10 @@ export class OperationsController {
     return this.operationsService.findOne(id);
   }
 
+  // El pipe va en @Body: con @UsePipes también parseaba el :id (string) contra el schema
+  // de objeto y todo PUT devolvía 400 "Expected object, received string".
   @Put(':id')
-  @UsePipes(new ZodValidationPipe(UpdateOpSchema))
-  update(@Param('id') id: string, @Body() dto: UpdateOpDto) {
+  update(@Param('id') id: string, @Body(new ZodValidationPipe(UpdateOpSchema)) dto: UpdateOpDto) {
     return this.operationsService.update(id, dto);
   }
 

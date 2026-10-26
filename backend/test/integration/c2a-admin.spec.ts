@@ -180,9 +180,10 @@ describe.sequential('C2a — real Nest HTTP, real service, real PostgreSQL SELEC
     const before = json(await rows(id));
     await db().cuentaCliente.update({ where: { id: cuentaA }, data: masterB });
     try {
-      await put(id, { instrucciones: 'Nueva cabecera', telefonoContacto: '000-sintetico', operationId });
+      // Sin operationId: con U7 el tramo sintético no suma la operación sintética.
+      await put(id, { instrucciones: 'Nueva cabecera', telefonoContacto: '000-sintetico' });
       expect(json(await rows(id))).toEqual(before);
-      expect(await db().eticket.findUniqueOrThrow({ where: { id } })).toMatchObject({ operationId, instrucciones: 'Nueva cabecera' });
+      expect(await db().eticket.findUniqueOrThrow({ where: { id } })).toMatchObject({ instrucciones: 'Nueva cabecera' });
       const current = (await rows(id))[0];
       await put(id, { tramos: [input(current, { cuentaDestinoId: cuentaA })] });
       expect(json(await rows(id))).toEqual(before);
@@ -288,8 +289,9 @@ describe.sequential('C2a — real Nest HTTP, real service, real PostgreSQL SELEC
       const response = await rejectPost({ clienteId, ...body });
       const updated = await rejectPut(id, { instrucciones: 'NO escribir', ...body });
       if ((body.tramos as TramoInput[])[0]?.sentido === 'RETIRO') {
-        expect(JSON.stringify(response.body)).toContain('PENDIENTE_U6');
-        expect(JSON.stringify(updated.body)).toContain('PENDIENTE_U6');
+        // U6 cerrada (2026-10-25): la oficina no recibe depósitos.
+        expect(JSON.stringify(response.body)).toContain('no recibe depósitos');
+        expect(JSON.stringify(updated.body)).toContain('no recibe depósitos');
       }
     }
     const cashId = await create([cash()]);
@@ -369,7 +371,8 @@ describe.sequential('C2a — real Nest HTTP, real service, real PostgreSQL SELEC
     const id = await create([deposit(2, cuentaB), deposit(1)]);
     // Attach an actual operation so privacy checks do not pass only because it is null.
     await db().eticket.updateMany({ where: { creadoPor: adminId, operationId }, data: { operationId: null } });
-    await put(id, { operationId });
+    // Directo en la base: con U7 la API rechaza vincular tramos sintéticos que no suman la operación.
+    await db().eticket.update({ where: { id }, data: { operationId } });
     const detail = await http().get(`/e-tickets/${id}`).set('Authorization', authorization('ADMIN')).expect(200);
     const list = await http().get('/e-tickets').query({ clienteId, pageSize: 100 }).set('Authorization', authorization('ADMIN')).expect(200);
     const listed = list.body.data.find((r: { id: string }) => r.id === id);

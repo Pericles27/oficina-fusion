@@ -3,7 +3,8 @@ import { PrismaService } from '@common/prisma/prisma.service';
 import { CreateOpDto, UpdateOpDto, OpFilterDto } from './dto/operations.dto';
 import { Operacion, Prisma } from '@prisma/client';
 import { Decimal } from 'decimal.js';
-import { aggregateByPar, aggregateByOperador, cotizMonedaAUsd, monedasSinCotizacion } from './aggregators';
+import { moverSaldo, pataSaldo, revertirSaldoDeOperacion } from '../customers/saldo';
+import { aggregateByPar, aggregateByOperador, cotizMonedaAUsd, monedasSinCotizacion, toUsd } from './aggregators';
 
 @Injectable()
 export class OperationsService {
@@ -25,6 +26,11 @@ export class OperationsService {
     const monto = new Decimal(dto.monto);
     const cotiz = new Decimal(dto.cotiz ?? (dto.tipo === 'C' ? par.compra.toString() : par.venta.toString()));
     const contra = monto.times(cotiz);
+
+    if (dto.cobertura === 'saldo') {
+      if (!dto.clienteId) throw new BadRequestException('Una operación contra saldo necesita un cliente');
+      pataSaldo({ tipo: dto.tipo, monto, contra }, par);
+    }
 
     const { codigo, numero } = await this.nextCodigo();
 
@@ -109,9 +115,40 @@ export class OperationsService {
     if (existing.cierreId) {
       throw new BadRequestException('No se puede modificar una operación ya cerrada (inmutable)');
     }
+    // U7: con un e-ticket activo, sus tramos tienen que seguir sumando lo mismo que la operación.
+    const cambiaMontos = (dto.monto && !new Decimal(dto.monto).eq(existing.monto.toString()))
+      || (dto.cotiz && !new Decimal(dto.cotiz).eq(existing.cotiz.toString()))
+      || (dto.cobertura && dto.cobertura !== existing.cobertura);
+    if (cambiaMontos) {
+      const eticket = await this.prisma.eticket.findFirst({
+        where: { operationId: id, estado: { not: 'cancelado' } },
+        select: { codigo: true },
+      });
+      if (eticket) {
+        throw new BadRequestException(
+          `La operación tiene el e-ticket ${eticket.codigo}: cancelalo antes de cambiar monto, cotización o cobertura`,
+        );
+      }
+    }
+
+    const cobertura = dto.cobertura ?? existing.cobertura;
+    const clienteId = dto.clienteId === undefined ? existing.clienteId : dto.clienteId;
+    if (cobertura === 'saldo') {
+      if (!clienteId) throw new BadRequestException('Una operación contra saldo necesita un cliente');
+      const { par } = existing as Operacion & { par: { base: string; quote: string } };
+      pataSaldo({ tipo: existing.tipo, monto: existing.monto.toString(), contra: existing.contra.toString() }, par);
+    }
+    const eraFinalizada = existing.status === 'finalizada';
+    // #19: el movimiento de saldo se calculó al finalizar; cambiarlo después lo dejaría desfasado.
+    const tocaSaldo = existing.cobertura === 'saldo' || cobertura === 'saldo';
+    if (eraFinalizada && tocaSaldo && dto.status === undefined
+        && (dto.cobertura || dto.clienteId !== undefined || dto.monto || dto.cotiz)) {
+      throw new BadRequestException('Una operación contra saldo finalizada no se edita: volvela a pendiente primero');
+    }
 
     const data: Prisma.OperacionUpdateInput = {};
     if (dto.status) data.status = dto.status;
+    if (dto.clienteId !== undefined) data.cliente = dto.clienteId ? { connect: { id: dto.clienteId } } : { disconnect: true };
     if (dto.notas !== undefined) data.notas = dto.notas;
     if (dto.cobertura) data.cobertura = dto.cobertura;
     if (dto.tsEjecucion !== undefined) data.tsEjecucion = dto.tsEjecucion;
@@ -124,15 +161,30 @@ export class OperationsService {
       data.contra = monto.times(cotiz).toFixed(4);
     }
 
-    return this.prisma.operacion.update({
-      where: { id },
-      data,
-      include: {
-        par: true,
-        cliente: true,
-        operador: { select: { id: true, nombre: true } },
-      },
+    if (dto.status === 'finalizada' && !eraFinalizada) data.tsFinalizada = dto.tsFinalizada ?? new Date();
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.operacion.update({
+        where: { id },
+        data,
+        include: {
+          par: true,
+          cliente: true,
+          operador: { select: { id: true, nombre: true } },
+        },
+      });
+      // #19: el saldo del cliente se mueve al finalizar y se libera si deja de estarlo.
+      if (dto.status && dto.status !== 'finalizada' && eraFinalizada) await revertirSaldoDeOperacion(tx, updated);
+      if (dto.status === 'finalizada' && !eraFinalizada) await this.aplicarSaldo(tx, updated);
+      return updated;
     });
+  }
+
+  /** #19 — Liquida contra el saldo del cliente la pata en USD de una operación con cobertura saldo. */
+  private async aplicarSaldo(tx: Prisma.TransactionClient, op: Operacion & { par: { base: string; quote: string } }) {
+    if (op.cobertura !== 'saldo' || !op.clienteId) return;
+    const pata = pataSaldo({ tipo: op.tipo, monto: op.monto.toString(), contra: op.contra.toString() }, op.par);
+    await moverSaldo(tx, { clienteId: op.clienteId, tipo: pata.tipo, montoUsd: pata.montoUsd, opId: op.id, manual: false, nota: op.codigo });
   }
 
   async finalize(id: string): Promise<Operacion> {
@@ -143,9 +195,17 @@ export class OperationsService {
     if (op.status === 'cancelada') {
       throw new BadRequestException('No se puede finalizar una operación cancelada');
     }
-    return this.prisma.operacion.update({
-      where: { id },
-      data: { status: 'finalizada', tsFinalizada: new Date() },
+    if (op.cobertura === 'saldo' && !op.clienteId) {
+      throw new BadRequestException('Una operación contra saldo necesita un cliente');
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.operacion.update({
+        where: { id },
+        data: { status: 'finalizada', tsFinalizada: new Date() },
+        include: { par: true },
+      });
+      await this.aplicarSaldo(tx, updated);
+      return updated;
     });
   }
 
@@ -227,7 +287,8 @@ export class OperationsService {
       operadorId: o.operadorId,
       operadorNombre: o.operador.nombre,
       tipo: o.tipo,
-      contra: o.contra.toString(),
+      // #9: el volumen se suma en USD, igual que en kpis/par (contra está en quote).
+      volumenUsd: toUsd(new Decimal(o.contra.toString()), o.par.quote, paresInput).toString(),
       comisionUsd: !o.comision
         ? undefined
         : o.comision.moneda === 'USD'

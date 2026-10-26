@@ -39,7 +39,7 @@ export function AppShell({ brand, brandIcon: BrandIcon, nav, user, onLogout, chi
       <aside
         className={`hidden md:flex md:flex-col md:shrink-0 md:sticky md:top-0 md:h-dvh sidebar-ink
                     transition-[width] duration-500 ease-[var(--ease-smooth)]
-                    ${expanded ? 'md:w-[232px]' : 'md:w-[78px]'}`}
+                    ${expanded ? 'md:w-[248px]' : 'md:w-[78px]'}`}
       >
         {/* Brand */}
         <div className="flex items-center justify-between gap-2 px-4 py-4">
@@ -58,14 +58,18 @@ export function AppShell({ brand, brandIcon: BrandIcon, nav, user, onLogout, chi
               </span>
             )}
           </Link>
+          {/* #14: el tema se puede cambiar con el menú expandido y colapsado. */}
           {expanded && (
-            <button
-              onClick={() => setExpanded(false)}
-              className="btn btn-icon"
-              aria-label="Colapsar menú"
-            >
-              <PanelLeftClose className="w-5 h-5" />
-            </button>
+            <span className="flex items-center gap-1 shrink-0">
+              <ThemeToggle />
+              <button
+                onClick={() => setExpanded(false)}
+                className="btn btn-icon"
+                aria-label="Colapsar menú"
+              >
+                <PanelLeftClose className="w-5 h-5" />
+              </button>
+            </span>
           )}
           {!expanded && <ThemeToggle />}
         </div>
@@ -103,8 +107,8 @@ export function AppShell({ brand, brandIcon: BrandIcon, nav, user, onLogout, chi
 
         {/* User */}
         <div className="divider mx-4" />
-        <div className={`px-4 py-4 flex items-center gap-3 ${expanded ? '' : 'justify-center'}`}>
-          <span className="avatar avatar-md">{user.initials}</span>
+        <div className={`px-4 py-4 flex items-center gap-3 ${expanded ? '' : 'flex-col justify-center'}`}>
+          <span className="avatar avatar-md" title={expanded ? undefined : `${user.name} · ${user.role}`}>{user.initials}</span>
           {expanded && (
             <div className="min-w-0 flex-1">
               <p className="text-[13.5px] font-medium truncate m-0"
@@ -116,12 +120,21 @@ export function AppShell({ brand, brandIcon: BrandIcon, nav, user, onLogout, chi
               </p>
             </div>
           )}
-          {onLogout && expanded && (
+          {/* Colapsado: sólo ícono. Expandido: botón con texto, abajo. */}
+          {onLogout && !expanded && (
             <button onClick={onLogout} className="btn btn-icon" aria-label="Cerrar sesión" title="Cerrar sesión">
               <LogOut className="w-4 h-4" />
             </button>
           )}
         </div>
+        {onLogout && expanded && (
+          <div className="px-3 pb-4">
+            <button onClick={onLogout} className="nav-item w-full" aria-label="Cerrar sesión">
+              <LogOut className="w-5 h-5 shrink-0" />
+              <span className="truncate">Cerrar sesión</span>
+            </button>
+          </div>
+        )}
       </aside>
 
       {/* ── Contenido ── */}
@@ -146,8 +159,16 @@ export function AppShell({ brand, brandIcon: BrandIcon, nav, user, onLogout, chi
               {brand}
             </span>
           </Link>
-          <ThemeToggle />
-          <span className="avatar avatar-sm">{user.initials}</span>
+          <span className="flex items-center gap-1 shrink-0">
+            <ThemeToggle />
+            {/* En pantallas chicas no hay menú lateral: cerrar sesión va acá. */}
+            {onLogout && (
+              <button onClick={onLogout} className="btn btn-icon" aria-label="Cerrar sesión" title="Cerrar sesión">
+                <LogOut className="w-4 h-4" />
+              </button>
+            )}
+            <span className="avatar avatar-sm ml-1">{user.initials}</span>
+          </span>
         </header>
 
         {/* Main — padding-bottom deja lugar a la tab bar */}

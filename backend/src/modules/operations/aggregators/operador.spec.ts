@@ -10,9 +10,9 @@ describe('aggregateByOperador', () => {
 
   it('agrupa operaciones por operador y cuenta compras/ventas', () => {
     const result = aggregateByOperador([
-      { operadorId: 'op1', operadorNombre: 'Ana', tipo: 'C', contra: '1000' },
-      { operadorId: 'op1', operadorNombre: 'Ana', tipo: 'V', contra: '500' },
-      { operadorId: 'op2', operadorNombre: 'Beto', tipo: 'C', contra: '2000' },
+      { operadorId: 'op1', operadorNombre: 'Ana', tipo: 'C', volumenUsd: '1000' },
+      { operadorId: 'op1', operadorNombre: 'Ana', tipo: 'V', volumenUsd: '500' },
+      { operadorId: 'op2', operadorNombre: 'Beto', tipo: 'C', volumenUsd: '2000' },
     ]);
 
     expect(result.stats).toHaveLength(2);
@@ -27,8 +27,8 @@ describe('aggregateByOperador', () => {
 
   it('acumula comisiones y ganancia por operador', () => {
     const result = aggregateByOperador([
-      { operadorId: 'op1', operadorNombre: 'Ana', tipo: 'C', contra: '1000', gananciaUsd: '10', comisionUsd: '2' },
-      { operadorId: 'op1', operadorNombre: 'Ana', tipo: 'C', contra: '1000', gananciaUsd: '5', comisionUsd: '1' },
+      { operadorId: 'op1', operadorNombre: 'Ana', tipo: 'C', volumenUsd: '1000', gananciaUsd: '10', comisionUsd: '2' },
+      { operadorId: 'op1', operadorNombre: 'Ana', tipo: 'C', volumenUsd: '1000', gananciaUsd: '5', comisionUsd: '1' },
     ]);
     const ana = result.stats[0];
     expect(ana.gananciaUsd).toBeCloseTo(15, 5);

@@ -1,13 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Building2, ChevronRight, MapPin, Plus, Search, Trash2, X } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Building2, ChevronRight, MapPin, Plus, Search, Trash2, Wallet, X } from 'lucide-react';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { useCaja } from '@/lib/caja-store';
 import { Campo, Dialogo, NuevoCliente } from '@/components/ClienteForms';
 import {
-  customersApi, nombreCliente, TIPO_CUENTA_LABEL,
-  type Cliente, type ClienteDireccion, type CuentaCliente, type MonedaCuenta, type TipoCuenta,
+  customersApi, nombreCliente, CUSTODIA_LABEL, TIPO_CUENTA_LABEL,
+  type Cliente, type ClienteDireccion, type CuentaCliente, type Custodia, type MonedaCuenta, type SaldoMovimiento, type TipoCuenta,
 } from '@/lib/customers';
 
 /**
@@ -20,6 +21,10 @@ import {
  */
 
 const errorDe = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
+
+const fmt = (v: string | number) =>
+  Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const usd = (v: string | number) => `US$ ${fmt(v)}`;
 
 export default function CustomersPage() {
   const { user } = useAuth();
@@ -112,6 +117,11 @@ export default function CustomersPage() {
                   {c.tipo}{c.doc ? ` · ${c.doc}` : ''}
                 </p>
               </div>
+              {Number(c.saldoUsd) !== 0 && (
+                <span className="currency text-[13.5px] shrink-0" style={{ color: Number(c.saldoUsd) < 0 ? 'var(--danger)' : undefined }}>
+                  {usd(c.saldoUsd)}
+                </span>
+              )}
               <ChevronRight className="w-4 h-4 shrink-0" style={{ color: 'var(--warm-gray-3)' }} />
             </button>
           ))}
@@ -125,7 +135,13 @@ export default function CustomersPage() {
         />
       )}
       {seleccionado && (
-        <DetalleCliente cliente={seleccionado} editable={esAdmin} onCerrar={() => setSeleccionado(null)} />
+        <DetalleCliente
+          cliente={seleccionado}
+          editable={esAdmin}
+          onCerrar={() => setSeleccionado(null)}
+          onCambio={(c) => { setSeleccionado(c); setClientes((cs) => cs.map((x) => (x.id === c.id ? c : x))); }}
+          onEliminado={() => { setSeleccionado(null); void cargar(busqueda); }}
+        />
       )}
     </div>
   );
@@ -140,7 +156,9 @@ function Aviso({ texto, onCerrar }: { texto: string; onCerrar?: () => void }) {
   );
 }
 
-function DetalleCliente({ cliente, editable, onCerrar }: { cliente: Cliente; editable: boolean; onCerrar: () => void }) {
+function DetalleCliente({ cliente, editable, onCerrar, onCambio, onEliminado }: {
+  cliente: Cliente; editable: boolean; onCerrar: () => void; onCambio: (c: Cliente) => void; onEliminado: () => void;
+}) {
   const [direcciones, setDirecciones] = useState<ClienteDireccion[]>([]);
   const [cuentas, setCuentas] = useState<CuentaCliente[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -169,6 +187,8 @@ function DetalleCliente({ cliente, editable, onCerrar }: { cliente: Cliente; edi
         {cliente.tipo}{cliente.doc ? ` · ${cliente.doc}` : ''}{cliente.notas ? ` · ${cliente.notas}` : ''}
       </p>
       {error && <Aviso texto={error} onCerrar={() => setError(null)} />}
+
+      <SaldoCliente cliente={cliente} editable={editable} onCambio={onCambio} />
 
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
@@ -238,7 +258,191 @@ function DetalleCliente({ cliente, editable, onCerrar }: { cliente: Cliente; edi
           <FormCuenta clienteId={cliente.id} onCancelar={() => setForm(null)} onGuardado={() => { setForm(null); void cargar(); }} />
         )}
       </section>
+
+      {editable && <EliminarCliente cliente={cliente} onEliminado={onEliminado} />}
     </Dialogo>
+  );
+}
+
+/**
+ * #19 — Saldo del cliente con la oficina, siempre en USD. Puede quedar negativo
+ * (no es lo habitual). La custodia define si el saldo está dentro de la caja: sólo
+ * entonces sus movimientos cuentan en el saldo esperado del cierre. Los movimientos
+ * manuales (el cliente entrega efectivo o retira) los carga el ADMIN.
+ */
+function SaldoCliente({ cliente, editable, onCambio }: {
+  cliente: Cliente; editable: boolean; onCambio: (c: Cliente) => void;
+}) {
+  const [movimientos, setMovimientos] = useState<SaldoMovimiento[]>([]);
+  const [form, setForm] = useState<{ tipo: 'credito' | 'debito'; monto: string; nota: string } | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const saldo = Number(cliente.saldoUsd);
+  const custodia: Custodia = cliente.custodia ?? 'caja';
+
+  const cargar = useCallback(async () => {
+    try {
+      setMovimientos(await customersApi.saldoMovimientos(cliente.id));
+    } catch (e) {
+      setError(errorDe(e, 'No pude cargar los movimientos de saldo'));
+    }
+  }, [cliente.id]);
+
+  useEffect(() => { void cargar(); }, [cargar]);
+
+  async function cambiarCustodia(c: Custodia) {
+    setError(null);
+    try { onCambio(await customersApi.update(cliente.id, { custodia: c })); } catch (e) { setError(errorDe(e, 'No pude guardar el cambio')); }
+  }
+
+  async function enviar(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form) return;
+    setEnviando(true);
+    setError(null);
+    try {
+      const actualizado = await customersApi.moverSaldo(cliente.id, {
+        tipo: form.tipo,
+        montoUsd: form.monto.trim().replace(',', '.'),
+        nota: form.nota.trim() || undefined,
+      });
+      setForm(null);
+      onCambio(actualizado);
+      await cargar();
+    } catch (err) {
+      setError(errorDe(err, 'No pude registrar el movimiento'));
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <section className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <h3 className="m-0 text-[15px] font-semibold flex items-center gap-1.5"><Wallet className="w-4 h-4" /> Saldo</h3>
+        {editable && !form && (
+          <div className="flex gap-1">
+            <button className="btn btn-ghost btn-sm" onClick={() => setForm({ tipo: 'credito', monto: '', nota: '' })}>
+              <ArrowDownLeft className="w-3.5 h-3.5" /> Ingreso
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setForm({ tipo: 'debito', monto: '', nota: '' })}>
+              <ArrowUpRight className="w-3.5 h-3.5" /> Retiro
+            </button>
+          </div>
+        )}
+      </div>
+      <div className="p-3 rounded-lg flex items-center justify-between gap-3 flex-wrap" style={{ background: 'var(--bg-base)' }}>
+        <span className="currency text-[20px] font-semibold" style={{ color: saldo < 0 ? 'var(--danger)' : undefined }}>
+          {usd(cliente.saldoUsd)}
+        </span>
+        {editable ? (
+          <select className="input input-sm" style={{ width: 'auto' }} value={custodia} aria-label="Custodia del saldo"
+                  onChange={(e) => void cambiarCustodia(e.target.value as Custodia)}>
+            <option value="caja">{CUSTODIA_LABEL.caja}</option>
+            <option value="separada">{CUSTODIA_LABEL.separada}</option>
+          </select>
+        ) : (
+          <span className="caption" style={{ color: 'var(--warm-gray-3)' }}>{CUSTODIA_LABEL[custodia]}</span>
+        )}
+      </div>
+      {saldo < 0 && (
+        <p className="m-0 caption" style={{ color: 'var(--danger)' }}>El cliente le debe a la oficina.</p>
+      )}
+      {error && <p className="m-0 text-[13px]" style={{ color: 'var(--danger)' }} role="alert">{error}</p>}
+
+      {form && (
+        <form className="card p-3 flex flex-col gap-2" onSubmit={enviar}>
+          <p className="m-0 text-[13.5px] font-medium">
+            {form.tipo === 'credito' ? 'El cliente entrega efectivo y suma saldo' : 'El cliente retira de su saldo'}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-[160px_1fr] gap-2">
+            <Campo label="Monto (USD)">
+              <input className="input currency" required autoFocus inputMode="decimal" placeholder="0,00"
+                     value={form.monto} onChange={(e) => setForm({ ...form, monto: e.target.value })} />
+            </Campo>
+            <Campo label="Nota">
+              <input className="input" value={form.nota} onChange={(e) => setForm({ ...form, nota: e.target.value })} />
+            </Campo>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setForm(null)} disabled={enviando}>Cancelar</button>
+            <button type="submit" className="btn btn-primary btn-sm" disabled={enviando}>
+              {enviando ? 'Guardando…' : form.tipo === 'credito' ? 'Registrar ingreso' : 'Registrar retiro'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {movimientos.length > 0 && (
+        <ul className="list-none p-0 m-0 flex flex-col">
+          {movimientos.map((m) => (
+            <li key={m.id} className="flex items-center justify-between gap-3 py-1.5 caption" style={{ borderBottom: '1px solid var(--border)' }}>
+              <span className="min-w-0 truncate" style={{ color: 'var(--warm-gray-3)' }}>
+                {new Date(m.ts).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}
+                {' · '}
+                {m.operacion ? `Operación ${m.operacion.codigo}` : m.tipo === 'credito' ? 'Ingreso' : 'Retiro'}
+                {m.nota && !m.operacion ? ` · ${m.nota}` : ''}
+              </span>
+              <span className="currency shrink-0" style={{ color: m.tipo === 'debito' ? 'var(--danger)' : 'var(--success)' }}>
+                {Number(m.montoUsd) > 0 ? '+' : ''}{fmt(m.montoUsd)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/**
+ * #11 — Baja de cliente. Se usa poco: queda al pie del detalle, como texto
+ * discreto, y pide confirmación. Es baja lógica (DELETE /customers/:id marca
+ * activo = false), así que sus operaciones y e-tickets se conservan.
+ */
+function EliminarCliente({ cliente, onEliminado }: { cliente: Cliente; onEliminado: () => void }) {
+  const { dispatch } = useCaja();
+  const [confirmando, setConfirmando] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function eliminar() {
+    setEnviando(true);
+    setError(null);
+    try {
+      await customersApi.remove(cliente.id);
+      dispatch({ type: 'REMOVE_CLIENTE', id: cliente.id });
+      onEliminado();
+    } catch (e) {
+      setError(errorDe(e, 'No pude eliminar el cliente'));
+      setEnviando(false);
+    }
+  }
+
+  if (!confirmando) {
+    return (
+      <div className="flex justify-end pt-2" style={{ borderTop: '1px solid var(--border)' }}>
+        <button type="button" className="caption" style={{ color: 'var(--warm-gray-3)' }} onClick={() => setConfirmando(true)}>
+          Eliminar cliente…
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card p-3 flex flex-col gap-2" style={{ borderColor: 'var(--danger)' }} role="alertdialog" aria-label="Confirmar eliminación">
+      <p className="m-0 text-[13.5px]">
+        ¿Eliminar a <strong>{nombreCliente(cliente)}</strong>? Deja de aparecer en la lista y en la planilla.
+        Sus operaciones y e-tickets se conservan.
+      </p>
+      {error && <p className="m-0 text-[13px]" style={{ color: 'var(--danger)' }} role="alert">{error}</p>}
+      <div className="flex justify-end gap-2">
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmando(false)} disabled={enviando}>Cancelar</button>
+        <button type="button" className="btn btn-danger btn-sm" onClick={() => void eliminar()} disabled={enviando}>
+          <Trash2 className="w-3.5 h-3.5" />
+          {enviando ? 'Eliminando…' : 'Sí, eliminar'}
+        </button>
+      </div>
+    </div>
   );
 }
 

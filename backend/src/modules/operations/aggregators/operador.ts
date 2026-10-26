@@ -26,7 +26,8 @@ export function aggregateByOperador(ops: {
   operadorId: string;
   operadorNombre: string;
   tipo: 'C' | 'V';
-  contra: string | number;
+  /** Volumen de la operación ya convertido a USD (el `contra` está en la moneda quote). */
+  volumenUsd: string | number;
   gananciaUsd?: string | number;
   comisionUsd?: string | number;
 }[]): OperadorAggregationResult {
@@ -57,7 +58,7 @@ export function aggregateByOperador(ops: {
     if (op.tipo === 'C') entry.compras++;
     else entry.ventas++;
 
-    entry.volumenUsd = entry.volumenUsd.plus(new Decimal(op.contra));
+    entry.volumenUsd = entry.volumenUsd.plus(new Decimal(op.volumenUsd));
     if (op.gananciaUsd != null) {
       entry.gananciaUsd = entry.gananciaUsd.plus(new Decimal(op.gananciaUsd));
     }

@@ -25,6 +25,11 @@ export async function cleanDatabase(): Promise<void> {
     testPrisma.comision.deleteMany(),
     testPrisma.gasto.deleteMany(),
     testPrisma.operacion.deleteMany(),
+    // Con replica los FK (y su ON DELETE CASCADE) no se disparan: se borra explícito.
+    testPrisma.usdtOperacion.deleteMany(),
+    testPrisma.cableMovimiento.deleteMany(),
+    testPrisma.cable.deleteMany(),
+    testPrisma.cierreSaldoReal.deleteMany(),
     testPrisma.cierre.deleteMany(),
     testPrisma.cuentaCliente.deleteMany(),
     testPrisma.clienteDireccion.deleteMany(),

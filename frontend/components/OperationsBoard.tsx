@@ -443,9 +443,9 @@ export function OperationsBoard() {
              sub={`spread ${fmt(s.spread, parDef.decimals)}`} />
       </div>
 
-      {/* Blotters — apilados salvo en pantallas muy anchas, así cada
-          planilla respira y no se corta la columna de acciones */}
-      <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
+      {/* Blotters — lado a lado desde 1440px (#15: apilados dejaban la mitad
+          del ancho sin usar en laptops); apilados en pantallas chicas. */}
+      <div className="grid grid-cols-1 min-[1440px]:grid-cols-2 gap-4">
         <BlotterTable tipo="C" ops={s.compras} parDef={parDef}
                       totalContra={s.usados} totalBase={s.baseCompra} prom={s.promCompra}
                       bindFocus={(fn) => { focusCompras.current = fn; }}

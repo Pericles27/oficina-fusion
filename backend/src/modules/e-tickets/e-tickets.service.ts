@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, ConflictException }
 import { PrismaService } from '@common/prisma/prisma.service';
 import { CreateEticketDto, UpdateEticketDto, TramoInput } from './dto/eticket.dto';
 import { EticketTramo, EticketEstado, Prisma } from '@prisma/client';
+import { Decimal } from 'decimal.js';
 
 /**
  * Lista blanca de campos que un CADETE puede ver. `select` explícito:
@@ -96,6 +97,41 @@ export class ETicketsService {
     return cash ? (deposit ? 'mixto' : 'en_mano') : 'deposito_banco';
   }
 
+  /**
+   * U7 (Nicolás, 2026-10-25), opción (a): los tramos de un e-ticket vinculado a una
+   * operación suman exactamente lo que la operación entrega y recibe; si no, no se guarda.
+   * Compra (C): la oficina recibe `monto` en base y entrega `contra` en quote; venta (V) al revés.
+   * Con cobertura `saldo` (#19) la pata en USD se liquida contra el saldo del cliente y no
+   * lleva tramos.
+   */
+  private async reconcile(tx: Prisma.TransactionClient, operationId: string | null | undefined, tramos: Array<{ sentido: string; moneda: string; monto: Prisma.Decimal | string }>) {
+    if (!operationId) return;
+    const op = await tx.operacion.findUnique({ where: { id: operationId }, include: { par: true } });
+    if (!op) throw new BadRequestException(`Operación ${operationId} no existe`);
+    const base = { moneda: op.par.base, monto: new Decimal(op.monto.toString()) };
+    const quote = { moneda: op.par.quote, monto: new Decimal(op.contra.toString()) };
+    const patas = [
+      { sentido: 'RETIRO', ...(op.tipo === 'C' ? base : quote) },
+      { sentido: 'ENTREGA', ...(op.tipo === 'C' ? quote : base) },
+    ].filter((p) => !(op.cobertura === 'saldo' && p.moneda === 'USD'));
+    const label = (sentido: string) => (sentido === 'ENTREGA' ? 'dejar' : 'retirar');
+    for (const t of tramos) {
+      if (!patas.some((p) => p.sentido === t.sentido && p.moneda === t.moneda)) {
+        throw new BadRequestException(`El tramo para ${label(t.sentido)} ${t.moneda} no corresponde a la operación ${op.codigo}`);
+      }
+    }
+    for (const p of patas) {
+      const suma = tramos
+        .filter((t) => t.sentido === p.sentido && t.moneda === p.moneda)
+        .reduce((acc, t) => acc.plus(t.monto.toString()), new Decimal(0));
+      if (!suma.eq(p.monto)) {
+        throw new BadRequestException(
+          `Los tramos para ${label(p.sentido)} ${p.moneda} suman ${suma.toFixed()} y la operación ${op.codigo} es de ${p.monto.toFixed()}`,
+        );
+      }
+    }
+  }
+
   private async prepareTramos(tx: Prisma.TransactionClient, clienteId: string, inputs: TramoInput[], previous: EticketTramo[]) {
     if (!inputs.length) throw new BadRequestException('Se requiere al menos un tramo');
     const ids = new Set<string>();
@@ -112,7 +148,8 @@ export class ETicketsService {
         moneda: input.moneda, monto: input.monto, cuentaDestinoId: null, ...emptySnapshot,
       };
       if (input.canal === 'DEPOSITO') {
-        if (input.sentido === 'RETIRO') throw new BadRequestException('PENDIENTE_U6: DEPOSITO/RETIRO');
+        // U6 (Nicolás, 2026-10-25): la oficina no recibe depósitos; el cliente siempre entrega efectivo.
+        if (input.sentido === 'RETIRO') throw new BadRequestException('La oficina no recibe depósitos: un retiro es siempre en efectivo');
         const cuentaId = input.cuentaDestinoId === undefined ? old?.cuentaDestinoId : input.cuentaDestinoId;
         if (!cuentaId) throw new BadRequestException('DEPOSITO requiere cuentaDestinoId');
         // Ownership is checked even when preserving the historical snapshot; never
@@ -150,6 +187,7 @@ export class ETicketsService {
       const prepared = await this.prepareTramos(tx, dto.clienteId, dto.tramos, []);
       const direccionEntrega = this.normalizeDireccion(dto.direccionEntrega);
       const metodoEntrega = this.delivery(dto.tramos, direccionEntrega);
+      await this.reconcile(tx, dto.operationId, dto.tramos);
       const last = await tx.eticket.findFirst({ orderBy: { numero: 'desc' }, select: { numero: true } });
       const numero = (last?.numero ?? 0) + 1;
       return tx.eticket.create({
@@ -244,6 +282,7 @@ export class ETicketsService {
       const resulting = dto.tramos ?? old.tramos;
       const direccion = this.normalizeDireccion(dto.direccionEntrega === undefined ? old.direccionEntrega : dto.direccionEntrega);
       const metodoEntrega = this.delivery(resulting, direccion);
+      await this.reconcile(tx, operationId, resulting);
       if (dto.tramos !== undefined) {
         const prepared = await this.prepareTramos(tx, clienteId, dto.tramos, old.tramos);
         const kept = prepared.flatMap((t) => t.id ? [t.id] : []);

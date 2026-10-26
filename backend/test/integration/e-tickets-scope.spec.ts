@@ -212,7 +212,14 @@ describe('F5 — e-tickets, scope de CADETE vía token (bolsa común)', () => {
     const par = await testPrisma.par.create({ data: { par: 'USD/ARS', base: 'USD', quote: 'ARS', nombre: 'Dólar / Peso', compra: '1000', venta: '1010', varPct: '0', decimals: 2 } });
     const op = await request(app.getHttpServer()).post('/operations').set('Authorization', `Bearer ${adminToken}`)
       .send({ tipo: 'C', parId: par.par, monto: '10', cobertura: 'efectivo' }).expect(201);
-    const conOp = await crearEticket(adminToken, { operationId: op.body.id });
+    // U7: los tramos suman lo mismo que la operación (compra 10 USD a 1000: se retiran 10 USD y se dejan 10.000 ARS).
+    const conOp = await crearEticket(adminToken, {
+      operationId: op.body.id,
+      tramos: [
+        { orden: 1, sentido: 'ENTREGA', canal: 'EFECTIVO', moneda: 'ARS', monto: '10000' },
+        { orden: 2, sentido: 'RETIRO', canal: 'EFECTIVO', moneda: 'USD', monto: '10' },
+      ],
+    });
     await crearEticket(adminToken);
 
     const res = await request(app.getHttpServer())

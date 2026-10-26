@@ -816,7 +816,11 @@ h4, .heading-4 { font-size: 15px; font-weight: 600; line-height: 1.33; margin: 0
 /* Variante de 4 columnas (cliente · monto · TC · total): entra sin
    scroll horizontal incluso en mobile */
 .tbl-blotter--slim { min-width: 0; table-layout: auto; }
-.tbl-blotter--slim td, .tbl-blotter--slim th { padding-inline: 8px; }
+.tbl-blotter--slim td, .tbl-blotter--slim th { padding-inline: 6px; }
+/* Más especificidad que `.tbl-blotter tbody td` (más abajo), que si no la pisa (#15). */
+.tbl-blotter.tbl-blotter--slim thead th,
+.tbl-blotter.tbl-blotter--slim tbody td,
+.tbl-blotter.tbl-blotter--slim tfoot td { padding-inline: 6px; }
 .tbl-blotter--slim td:last-child, .tbl-blotter--slim th:last-child {
   padding-inline: 4px 8px;
 }
@@ -1022,7 +1026,9 @@ h4, .heading-4 { font-size: 15px; font-weight: 600; line-height: 1.33; margin: 0
 @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
-.animate-in { animation: slideUp 460ms var(--ease-smooth) both; }
+/* `backwards`, no `both`: un transform que queda aplicado al terminar convierte
+   a .page en el contenedor de los position:fixed (modales), que se cortaban. */
+.animate-in { animation: slideUp 460ms var(--ease-smooth) backwards; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

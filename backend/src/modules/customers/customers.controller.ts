@@ -86,6 +86,12 @@ export class CustomersController {
     return this.customersService.adjustSaldo(id, dto);
   }
 
+  @Get(':id/saldo')
+  @Roles(RolUsuario.ADMIN, RolUsuario.OPERADOR)
+  saldoMovimientos(@Param('id') id: string) {
+    return this.customersService.saldoMovimientos(id);
+  }
+
   // =========================================================
   // DIRECCIONES — Endpoints anidados a /customers/:id/addresses
   // =========================================================

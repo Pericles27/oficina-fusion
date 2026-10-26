@@ -63,6 +63,15 @@ enum GastoCategoria {
   Otros
 }
 
+/// #13: de quién es el gasto y cómo cuenta en el cierre.
+/// OFICINA y JEFE son gasto del día; JEFE_A_DEVOLVER sale de la caja pero
+/// queda como deuda del jefe con la oficina (no es gasto del día).
+enum GastoTipo {
+  OFICINA
+  JEFE
+  JEFE_A_DEVOLVER
+}
+
 enum UsdtTipo {
   IN
   OUT
@@ -151,15 +160,16 @@ model Usuario {
   modificadoEn     DateTime     @updatedAt
 
   sesiones            Sesion[]
-  operaciones         Operacion[]  @relation("Operador")
-  eTicketsCreados     Eticket[]    @relation("ETicketCreador")
-  eTicketsConfirmados Eticket[]    @relation("ETicketConfirmador")
-  tramitesCreados     Tramite[]    @relation("TramiteCreador")
-  tramitesAsignados   Tramite[]    @relation("TramiteAsignado")
-  reunionesCreadas    Reunion[]    @relation("ReunionCreador")
+  operaciones         Operacion[]     @relation("Operador")
+  eTicketsCreados     Eticket[]       @relation("ETicketCreador")
+  eTicketsConfirmados Eticket[]       @relation("ETicketConfirmador")
+  tramitesCreados     Tramite[]       @relation("TramiteCreador")
+  tramitesAsignados   Tramite[]       @relation("TramiteAsignado")
+  reunionesCreadas    Reunion[]       @relation("ReunionCreador")
   comisiones          Comision[]
   cables              Cable[]
-  cierresOperados     Cierre[]     @relation("CierreOperador")
+  usdtOperaciones     UsdtOperacion[]
+  cierresOperados     Cierre[]        @relation("CierreOperador")
   auditEvents         AuditEvent[]
   loginEvents         LoginEvent[]
 
@@ -207,7 +217,7 @@ model Cliente {
   doc              String?
   // saldo rolling actualizado in-place al confirmar cierre
   saldoUsd         Decimal     @default(0) @db.Decimal(18, 2)
-  custodia         String? // "caja" | "separada"
+  custodia         String? // #19: "caja" | "separada" (null = "caja")
   notas            String?
   activo           Boolean     @default(true)
   puntosHabituales Decimal?    @db.Decimal(18, 6)
@@ -372,7 +382,10 @@ model Gasto {
   codigo    String         @unique
   fecha     DateTime       @default(now())
   concepto  String
-  monto     Decimal        @db.Decimal(18, 2) /// en ARS
+  /// Legado: monto en ARS. Los gastos nuevos (#13) se cargan en USD.
+  monto     Decimal?       @db.Decimal(18, 2)
+  montoUsd  Decimal?       @db.Decimal(18, 2)
+  tipo      GastoTipo      @default(OFICINA)
   categoria GastoCategoria
   notas     String?
 
@@ -409,6 +422,32 @@ model UsdtMovimiento {
 // =============================================================
 // CABLE — transferencia compuesta (1 ingreso + 1 salida)
 // =============================================================
+
+/// #13: operación de USDT del día, en USD: ingreso, egreso y comisión
+/// (la paga la oficina). Ganancia implícita = ingreso − egreso − comisión.
+model UsdtOperacion {
+  id     String   @id @default(cuid())
+  codigo String   @unique // UT-0001
+  fecha  DateTime @default(now())
+
+  operadorId String
+  operador   Usuario @relation(fields: [operadorId], references: [id])
+
+  montoIngresoUsd Decimal @db.Decimal(18, 2)
+  montoEgresoUsd  Decimal @db.Decimal(18, 2)
+  comisionUsd     Decimal @default(0) @db.Decimal(18, 2)
+  gananciaNetaUsd Decimal @db.Decimal(18, 2)
+  notas           String?
+
+  cierreId String?
+  cierre   Cierre? @relation(fields: [cierreId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([cierreId])
+  @@index([fecha])
+  @@map("usdt_operacion")
+}
 
 model Cable {
   id           String    @id @default(cuid())
@@ -532,6 +571,11 @@ model Cierre {
   totalGastosArs        Decimal @db.Decimal(18, 2)
   totalGastosUsd        Decimal @db.Decimal(18, 2)
   resultadoOperativoUsd Decimal @db.Decimal(18, 2)
+  /// #13: ganancia implícita de cables y USDT (ingreso − egreso − comisión).
+  gananciaCablesUsd     Decimal @default(0) @db.Decimal(18, 2)
+  gananciaUsdtUsd       Decimal @default(0) @db.Decimal(18, 2)
+  /// #13: gastos del jefe a devolver: salen de la caja, no son gasto del día.
+  deudaJefeUsd          Decimal @default(0) @db.Decimal(18, 2)
 
   volumenTotalUsd Decimal @db.Decimal(18, 2)
   nOps            Int
@@ -542,6 +586,7 @@ model Cierre {
 
   caja            CierreCaja?
   saldosMoneda    CierreSaldoMoneda[]
+  saldosReales    CierreSaldoReal[]
   resultadosPar   CierreResultadoPar[]
   operadores      CierreOperador[]
   saldosCliente   CierreSaldoCliente[]
@@ -551,6 +596,7 @@ model Cierre {
   comisiones       Comision[]
   gastos           Gasto[]
   usdtMovs         UsdtMovimiento[]
+  usdtOperaciones  UsdtOperacion[]
   cables           Cable[]
   saldoMovimientos ClienteSaldoMovimiento[]
 
@@ -587,6 +633,22 @@ model CierreSaldoMoneda {
 
   @@unique([cierreId, moneda])
   @@map("cierre_saldo_moneda")
+}
+
+/// #12 — Saldo físico/real contado al cierre, cargado por su valor en USD.
+/// Puede haber varios renglones por moneda (p. ej. euros comprados a
+/// distintas cotizaciones). La suma de `montoUsd` es Cierre.cajaContadaUsd.
+model CierreSaldoReal {
+  id       String  @id @default(cuid())
+  cierreId String
+  cierre   Cierre  @relation(fields: [cierreId], references: [id], onDelete: Cascade)
+  orden    Int
+  moneda   Moneda
+  montoUsd Decimal @db.Decimal(18, 2)
+  detalle  String?
+
+  @@unique([cierreId, orden])
+  @@map("cierre_saldo_real")
 }
 
 model CierreResultadoPar {
@@ -649,6 +711,8 @@ model CierreSaldoCliente {
   clienteId        String
   cliente          Cliente @relation(fields: [clienteId], references: [id])
   clienteNombre    String
+  /// #19: "caja" | "separada" al momento del cierre.
+  custodia         String  @default("caja")
   saldoUsdApertura Decimal @db.Decimal(18, 2)
   saldoUsdCierre   Decimal @db.Decimal(18, 2)
   deltaUsd         Decimal @db.Decimal(18, 2)
@@ -700,9 +764,9 @@ model Eticket {
   codigo String   @unique // ET-0001
   ts     DateTime @default(now())
 
-  operationId     String?    @unique
-  operation       Operacion? @relation(fields: [operationId], references: [id])
-  tramos          EticketTramo[]
+  operationId String?        @unique
+  operation   Operacion?     @relation(fields: [operationId], references: [id])
+  tramos      EticketTramo[]
 
   clienteId String
   cliente   Cliente @relation(fields: [clienteId], references: [id])
@@ -710,26 +774,26 @@ model Eticket {
   estado EticketEstado @default(pendiente)
 
   // Datos de entrega (no muestra datos económicos)
-  metodoEntrega   String     // "en_mano" | "deposito_banco"
+  metodoEntrega    String // "en_mano" | "deposito_banco"
   direccionEntrega String?
   telefonoContacto String?
-  nombreRecibe    String?
-  horarioEntrega  String?
-  banco           String?
-  cuentaDeposito  String?
-  instrucciones   String?
+  nombreRecibe     String?
+  horarioEntrega   String?
+  banco            String?
+  cuentaDeposito   String?
+  instrucciones    String?
 
   // Montos para el cadete (cuánto entregar, cuánto recibir)
-  monedaEntregar  Moneda?
-  montoEntregar   Decimal?   @db.Decimal(18, 4)
-  monedaRecibir   Moneda?
-  montoRecibir    Decimal?   @db.Decimal(18, 4)
+  monedaEntregar Moneda?
+  montoEntregar  Decimal? @db.Decimal(18, 4)
+  monedaRecibir  Moneda?
+  montoRecibir   Decimal? @db.Decimal(18, 4)
 
-  confirmadoPor   String?
-  confirmadoPorUsuario Usuario? @relation("ETicketConfirmador", fields: [confirmadoPor], references: [id])
-  confirmadoEn    DateTime?
+  confirmadoPor        String?
+  confirmadoPorUsuario Usuario?  @relation("ETicketConfirmador", fields: [confirmadoPor], references: [id])
+  confirmadoEn         DateTime?
 
-  creadoPor       String
+  creadoPor        String
   creadoPorUsuario Usuario? @relation("ETicketCreador", fields: [creadoPor], references: [id])
   creadoEn         DateTime @default(now())
 
@@ -746,14 +810,14 @@ model Eticket {
 // =============================================================
 
 model EticketTramo {
-  id              String        @id @default(cuid())
+  id              String         @id @default(cuid())
   eticketId       String
-  eticket         Eticket       @relation(fields: [eticketId], references: [id], onDelete: Cascade)
+  eticket         Eticket        @relation(fields: [eticketId], references: [id], onDelete: Cascade)
   orden           Int
   sentido         TramoSentido
   canal           TramoCanal
   moneda          Moneda
-  monto           Decimal       @db.Decimal(18, 4)
+  monto           Decimal        @db.Decimal(18, 4)
   cuentaDestinoId String?
   cuentaDestino   CuentaCliente? @relation(fields: [cuentaDestinoId], references: [id])
   depBeneficiario String?

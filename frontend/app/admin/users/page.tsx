@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { KeyRound, Plus, Search, ShieldCheck, UserCog, X } from 'lucide-react';
+import { KeyRound, Plus, Search, ShieldCheck, X } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 
@@ -127,19 +127,16 @@ export default function UsersPage() {
   const admins = usuarios.filter((u) => u.roles.includes('ADMIN')).length;
 
   return (
-    <div className="flex flex-col gap-5">
-      <header className="flex flex-wrap items-center justify-between gap-3">
+    <div className="page animate-in">
+      <header className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="m-0 text-[22px] font-semibold flex items-center gap-2">
-            <UserCog className="w-5 h-5" style={{ color: 'var(--warm-gray-3)' }} />
-            Usuarios
-          </h1>
-          <p className="m-0 caption" style={{ color: 'var(--warm-gray-3)' }}>
+          <h1>Usuarios</h1>
+          <p className="text-small m-0 mt-1" style={{ color: 'var(--warm-gray-2)' }}>
             Altas, roles y reseteo de contraseñas
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setNuevo(true)}>
-          <Plus className="w-4 h-4" /> Nuevo usuario
+        <button className="btn btn-primary btn-sm" onClick={() => setNuevo(true)}>
+          <Plus className="w-4 h-4" /> Nuevo
         </button>
       </header>
 

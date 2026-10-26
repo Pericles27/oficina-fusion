@@ -5,7 +5,7 @@ import { SaldoAdjustmentDto } from './dto/saldo-adjustment.dto';
 import { CreateAccountDto, UpdateAccountDto } from './dto/account.dto';
 import { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
 import { Cliente, ClienteDireccion, Prisma } from '@prisma/client';
-import { Decimal } from 'decimal.js';
+import { moverSaldo } from './saldo';
 
 @Injectable()
 export class CustomersService {
@@ -326,37 +326,26 @@ export class CustomersService {
   }
 
   /**
-   * Ajusta el saldo USD del cliente y registra el movimiento en el ledger.
-   * tipo=credito suma saldo, tipo=debito resta saldo (no permite negativo).
+   * #19 — Movimiento manual de saldo (sólo ADMIN): el cliente entrega efectivo
+   * (crédito) o retira (débito). Se admite saldo negativo: no es lo habitual,
+   * pero puede pasar.
    */
   async adjustSaldo(clienteId: string, dto: SaldoAdjustmentDto): Promise<Cliente> {
-    const cliente = await this.findOne(clienteId);
-
-    const delta = dto.tipo === 'credito' ? new Decimal(dto.montoUsd) : new Decimal(dto.montoUsd).neg();
-    const saldoPost = new Decimal(cliente.saldoUsd.toString()).plus(delta);
-
-    if (saldoPost.isNegative()) {
-      throw new BadRequestException('El ajuste dejaría el saldo del cliente en negativo');
-    }
-
+    await this.findOne(clienteId);
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.cliente.update({
-        where: { id: clienteId },
-        data: { saldoUsd: saldoPost.toFixed(2) },
-      });
+      await moverSaldo(tx, { clienteId, tipo: dto.tipo, montoUsd: dto.montoUsd, manual: true, nota: dto.nota });
+      return tx.cliente.findUniqueOrThrow({ where: { id: clienteId } });
+    });
+  }
 
-      await tx.clienteSaldoMovimiento.create({
-        data: {
-          clienteId,
-          tipo: dto.tipo,
-          montoUsd: dto.montoUsd.toFixed(2),
-          saldoPostUsd: saldoPost.toFixed(2),
-          manual: dto.manual,
-          nota: dto.nota,
-        },
-      });
-
-      return updated;
+  /** #19 — Historial de movimientos de saldo del cliente, del más reciente al más viejo. */
+  async saldoMovimientos(clienteId: string, limit = 50) {
+    await this.findOne(clienteId);
+    return this.prisma.clienteSaldoMovimiento.findMany({
+      where: { clienteId },
+      orderBy: [{ ts: 'desc' }, { createdAt: 'desc' }],
+      take: limit,
+      include: { operacion: { select: { codigo: true } } },
     });
   }
 }

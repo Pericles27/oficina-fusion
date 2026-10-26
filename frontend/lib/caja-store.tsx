@@ -197,6 +197,7 @@ function mensajeDe(e: unknown): string {
 interface ApiOperacion {
   id: string;
   codigo: string;
+  numero: number;
   ts: string;
   tipo: Tipo;
   parId: string;
@@ -255,6 +256,12 @@ function clienteFromApi(c: ApiCliente): Cliente {
       moneda: cu.moneda ?? 'ARS',
     })),
   };
+}
+
+/** #20: la Mesa muestra las operaciones en el orden en que se cargaron (la primera arriba).
+    La API las devuelve de la más nueva a la más vieja; `numero` es correlativo de carga. */
+function enOrdenDeCarga(ops: ApiOperacion[]): ApiOperacion[] {
+  return [...ops].sort((a, b) => a.numero - b.numero);
 }
 
 /** Convierte una Operacion de la API al shape de UI. */
@@ -330,7 +337,7 @@ export function CajaProvider({ children }: { children: ReactNode }) {
     const res = await api.get<{ data: ApiOperacion[] }>('/operations?pageSize=200');
     setState((prev) => ({
       ...prev,
-      operaciones: res.data
+      operaciones: enOrdenDeCarga(res.data)
         .filter((o) => o.status !== 'cancelada')
         .map((o) => operationFromApi(o, prev.clientes)),
     }));
@@ -368,14 +375,14 @@ export function CajaProvider({ children }: { children: ReactNode }) {
       try {
         const [paresRes, clientesRes, opsRes] = await Promise.all([
           api.get<ApiPar[]>('/quotations'),
-          api.get<{ data: ApiCliente[] }>('/customers?pageSize=200'),
+          api.get<{ data: ApiCliente[] }>('/customers?activo=true&pageSize=200'),
           api.get<{ data: ApiOperacion[] }>('/operations?pageSize=200'),
         ]);
         if (cancelado) return;
 
         const pares = paresRes.map(parFromApi);
         const clientes = clientesRes.data.map(clienteFromApi);
-        const operaciones = opsRes.data
+        const operaciones = enOrdenDeCarga(opsRes.data)
           .filter((o) => o.status !== 'cancelada')
           .map((o) => operationFromApi(o, clientes));
 
@@ -407,7 +414,7 @@ export function CajaProvider({ children }: { children: ReactNode }) {
           clientes,
           pares,
           traders: Array.from(tradersMap.values()),
-          lastOperadorId: operaciones[0]?.operadorId ?? '',
+          lastOperadorId: operaciones[operaciones.length - 1]?.operadorId ?? '',
           kpisPar: [],
           kpisOperador: [],
         });
@@ -479,6 +486,11 @@ export function CajaProvider({ children }: { children: ReactNode }) {
             case 'ADD_CLIENTE':
               // B3: cliente recién creado desde la planilla (ya persistido con POST /customers).
               setState((prev) => ({ ...prev, clientes: [action.cliente, ...prev.clientes] }));
+              return;
+
+            case 'REMOVE_CLIENTE':
+              // Cliente dado de baja desde Clientes: deja de ofrecerse en la planilla.
+              setState((prev) => ({ ...prev, clientes: prev.clientes.filter((c) => c.id !== action.id) }));
               return;
 
             case 'EDIT_OP': {
