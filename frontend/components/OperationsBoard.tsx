@@ -17,6 +17,7 @@ import {
   posicionRealizada,
   posicionAbierta,
   OP_STATUS_LABEL,
+  PAR_PREDETERMINADO,
   type Operation,
   type Par,
   type Tipo,
@@ -360,7 +361,7 @@ function BlotterTable({
 
 export function OperationsBoard() {
   const { state, dispatch, error } = useCaja();
-  const [par, setPar] = useState(state.pares[0]?.par ?? 'USD/ARS');
+  const [par, setPar] = useState(state.pares[0]?.par ?? PAR_PREDETERMINADO);
 
   /** Operación cuyo e-ticket está abierto */
   const [openId, setOpenId] = useState<string | null>(null);

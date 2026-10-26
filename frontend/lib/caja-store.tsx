@@ -243,6 +243,18 @@ function parFromApi(p: ApiPar): Par {
   };
 }
 
+/** Par predeterminado de la mesa (el más operado): va primero en tabs y selección. */
+export const PAR_PREDETERMINADO = 'USD/ARS';
+
+/** Pares desde la API (orden alfabético) con el predeterminado primero. */
+function paresFromApi(ps: ApiPar[]): Par[] {
+  const pares = ps.map(parFromApi);
+  return [
+    ...pares.filter((p) => p.par === PAR_PREDETERMINADO),
+    ...pares.filter((p) => p.par !== PAR_PREDETERMINADO),
+  ];
+}
+
 function clienteFromApi(c: ApiCliente): Cliente {
   return {
     id: c.id,
@@ -380,7 +392,7 @@ export function CajaProvider({ children }: { children: ReactNode }) {
         ]);
         if (cancelado) return;
 
-        const pares = paresRes.map(parFromApi);
+        const pares = paresFromApi(paresRes);
         const clientes = clientesRes.data.map(clienteFromApi);
         const operaciones = enOrdenDeCarga(opsRes.data)
           .filter((o) => o.status !== 'cancelada')
@@ -561,7 +573,7 @@ export function CajaProvider({ children }: { children: ReactNode }) {
                 venta: String(action.venta),
               });
               const pares = await api.get<ApiPar[]>('/quotations');
-              setState((prev) => ({ ...prev, pares: pares.map(parFromApi) }));
+              setState((prev) => ({ ...prev, pares: paresFromApi(pares) }));
               return;
             }
 

@@ -7,6 +7,11 @@ kill_timeout = 5
 [build]
   dockerfile = "Dockerfile.fly"
 
+# Aplica las migraciones pendientes antes de liberar cada versión; si fallan,
+# el deploy se aborta y queda la versión anterior.
+[deploy]
+  release_command = "npx prisma migrate deploy"
+
 [env]
   PORT = "3001"
   NODE_ENV = "production"
